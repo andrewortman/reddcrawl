@@ -1,0 +1,71 @@
+group 'com.andrewortman.reddcrawl'
+version '1.0-SNAPSHOT'
+
+apply plugin: 'java'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    //spring depedencies
+    compile 'org.springframework:spring-webmvc:4.1.6.RELEASE'
+    compile 'org.springframework:spring-context:4.1.6.RELEASE'
+    compile 'org.springframework.data:spring-data-jpa:1.8.0.RELEASE'
+
+    //database
+    compile 'org.postgresql:postgresql:9.4-1201-jdbc41'
+    compile 'org.hibernate:hibernate-entitymanager:4.3.10.Final'
+    compile 'org.apache.commons:commons-dbcp2:2.1'
+
+    //embedded HTTP server (jetty)
+    compile 'org.eclipse.jetty:jetty-server:9.3.0.M2'
+    compile 'org.eclipse.jetty:jetty-servlet:9.3.0.M2'
+
+    //general utilities
+    compile 'joda-time:joda-time:2.8'
+    compile 'com.google.guava:guava:18.0'
+
+    //rest server / client
+    compile 'org.glassfish.jersey.core:jersey-client:2.17'
+    compile 'org.glassfish.jersey.media:jersey-media-json-jackson:2.17'
+    compile 'com.fasterxml.jackson.core:jackson-core:2.5.3'
+    compile 'com.fasterxml.jackson.core:jackson-databind:2.5.3'
+
+    //jsr code analysis
+    compile 'com.google.code.findbugs:jsr305:3.0.0'
+
+    //logging
+    compile 'org.slf4j:slf4j-log4j12:1.7.12'
+
+    //for metrics / optional datadog reporting
+    compile 'io.dropwizard.metrics:metrics-core:3.1.2'
+    compile 'org.coursera:metrics-datadog:1.1.1'
+
+    //for testing
+    testCompile group: 'junit', name: 'junit', version: '4.11'
+}
+
+buildscript {
+    repositories {
+        maven {
+            url "http://repo1.maven.org/maven2"
+        }
+        maven {
+            url 'http://dl.bintray.com/content/johnrengelman/gradle-plugins'
+        }
+    }
+    dependencies {
+        classpath group: 'org.hibernate', name: 'hibernate-gradle-plugin', version: '4.3.10.Final'
+    }
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'com.andrewortman.reddcrawl.Application'
+    }
+
+    from configurations.compile.collect {
+        it.isDirectory() ? it : zipTree(it)
+    }
+}

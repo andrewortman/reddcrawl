@@ -1,0 +1,19 @@
+.link-link {
+    font-size: 12pt;
+}
+
+.link-info {
+    font-size: 10pt;
+}
+
+.link-score {
+    font-size: 14pt;
+    font-weight: bold;
+    text-align: center;
+}
+
+.vcenter {
+    position: relative;
+    top: 50%;
+    transform: translateY(-50%);
+}

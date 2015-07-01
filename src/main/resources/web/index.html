@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Reddcrawl</title>
+
+    <link href="/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/css/bootstrap-theme.min.css" rel="stylesheet">
+    <link href="/css/reddcrawl.css" rel="stylesheet">
+</head>
+<body ng-app="reddcrawlApp">
+<div class="container" ng-controller="reddcrawlMainController">
+
+    <div class="row">
+        <div class="col-xs-12 text-center">
+            <h1 style="margin: 0px">Reddcrawl</h1>
+            <div ng-show="stories" class="text-muted">Last updated at {{updateTime | date : 'medium'}}</div>
+            <hr style="margin-top: 3px"/>
+        </div>
+    </div>
+
+    <div class="row text-muted text-center" ng-show="!stories">
+        <div class="col-xs-12">
+            <strong>Loading Stories</strong><br/>
+            (this might take a second)
+        </div>
+    </div>
+
+    <div class="story-table container">
+        <div ng-repeat="story in stories">
+            <reddcrawl-story></reddcrawl-story>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript" src="//www.google.com/jsapi"></script>
+<script src="/js/lib/jquery-1.11.3.min.js"></script>
+<script src="/js/lib/angular.min.js"></script>
+<script src="/js/lib/bootstrap.min.js"></script>
+<script src="/js/reddcrawl.js"></script>
+</body>
+</html>
