@@ -3,7 +3,7 @@ package com.andrewortman.reddcrawl.services;
 import com.andrewortman.reddcrawl.client.RedditClient;
 import com.andrewortman.reddcrawl.client.RedditClientException;
 import com.andrewortman.reddcrawl.client.models.RedditStory;
-import com.andrewortman.reddcrawl.repository.StoryDao;
+import com.andrewortman.reddcrawl.repository.StoryRepository;
 import com.andrewortman.reddcrawl.repository.model.StoryHistoryModel;
 import com.andrewortman.reddcrawl.repository.model.StoryModel;
 import com.codahale.metrics.Histogram;
@@ -29,7 +29,7 @@ public class StoryHistoryUpdaterService extends Service {
     private final RedditClient redditClient;
 
     @Nonnull
-    private final StoryDao storyDao;
+    private final StoryRepository storyRepository;
 
     @Nonnull
     private final Integer numUpdateWorkers;
@@ -47,13 +47,13 @@ public class StoryHistoryUpdaterService extends Service {
     private final Histogram historyUpdateBatchHistogram;
 
     public StoryHistoryUpdaterService(@Nonnull final RedditClient redditClient,
-                                      @Nonnull final StoryDao storyDao,
+                                      @Nonnull final StoryRepository storyRepository,
                                       @Nonnull final Integer numUpdateWorkers,
                                       @Nonnull final Integer oldestStoryAgeInSeconds,
                                       @Nonnull final Integer historyUpdateIntervalInSeconds,
                                       @Nonnull final MetricRegistry metricRegistry) {
         this.redditClient = redditClient;
-        this.storyDao = storyDao;
+        this.storyRepository = storyRepository;
         this.numUpdateWorkers = numUpdateWorkers;
         this.oldestStoryAgeInSeconds = oldestStoryAgeInSeconds;
         this.historyUpdateIntervalInSeconds = historyUpdateIntervalInSeconds;
@@ -75,7 +75,7 @@ public class StoryHistoryUpdaterService extends Service {
 
             //request a big batch of stories up to worker count * max listing size
             final List<StoryModel> storiesNeedingUpdate =
-                    storyDao.findStoriesNeedingUpdate(maxTimeAgo, minTimeAgo, this.numUpdateWorkers * RedditClient.MAX_ITEMS_PER_LISTING_PAGE);
+                    storyRepository.findStoriesNeedingUpdate(maxTimeAgo, minTimeAgo, this.numUpdateWorkers * RedditClient.MAX_ITEMS_PER_LISTING_PAGE);
 
             //update the histogram so we can see when we are saturating the batch size or not
             historyUpdateBatchHistogram.update(storiesNeedingUpdate.size());
@@ -95,36 +95,36 @@ public class StoryHistoryUpdaterService extends Service {
                 final Thread thread = new Thread(new Runnable() {
                     @Override
                     public void run() {
-                        try {
-                            //in each thread, we are going to first convert the story map into a lookup table
-                            final HashMap<String, StoryModel> storyModelLookup = new HashMap<>();
-                            for (final StoryModel storyModel : storyBatchItem) {
-                                storyModelLookup.put(storyModel.getRedditShortId(), storyModel);
-                            }
-
-                            //and then we will request the list of story ids to be updated via the redditclient
-                            LOGGER.info("Updating " + storyModelLookup.size() + " stories");
-                            final Map<String, RedditStory> storiesUpdated = redditClient.getStoriesById(storyModelLookup.keySet());
-                            LOGGER.info("Received back " + storiesUpdated.size() + " stories from reddit");
-                            //then we will create story history items with them
-                            for (final RedditStory updatedRedditStory : storiesUpdated.values()) {
-                                final StoryHistoryModel newHistoryItem = new StoryHistoryModel();
-                                newHistoryItem.setTimestamp(new Date());
-                                newHistoryItem.setScore(updatedRedditStory.getScore());
-                                newHistoryItem.setHotness(updatedRedditStory.getHotness());
-                                newHistoryItem.setComments(updatedRedditStory.getNumComments());
-                                newHistoryItem.setGilded(updatedRedditStory.getGilded());
-
-                                //and then store that history item in the database
-                                storyDao.addStoryHistory(storyModelLookup.get(updatedRedditStory.getId()), newHistoryItem);
-                                LOGGER.debug("Updated history for " + updatedRedditStory.getId());
-                                historyUpdateMeter.mark();
-                            }
-                        } catch (final RedditClientException redditClientException) {
-                            //catch point - if a RCE is emitted we are just going to ignore this batch and emit an error to log
-                            //the batch will be in the next iteration to be retried
-                            LOGGER.error("Worker received RCE: " + redditClientException);
+                    try {
+                        //in each thread, we are going to first convert the story map into a lookup table
+                        final HashMap<String, StoryModel> storyModelLookup = new HashMap<>();
+                        for (final StoryModel storyModel : storyBatchItem) {
+                            storyModelLookup.put(storyModel.getRedditShortId(), storyModel);
                         }
+
+                        //and then we will request the list of story ids to be updated via the redditclient
+                        LOGGER.info("Updating " + storyModelLookup.size() + " stories");
+                        final Map<String, RedditStory> storiesUpdated = redditClient.getStoriesById(storyModelLookup.keySet());
+                        LOGGER.info("Received back " + storiesUpdated.size() + " stories from reddit");
+                        //then we will create story history items with them
+                        for (final RedditStory updatedRedditStory : storiesUpdated.values()) {
+                            final StoryHistoryModel newHistoryItem = new StoryHistoryModel();
+                            newHistoryItem.setTimestamp(new Date());
+                            newHistoryItem.setScore(updatedRedditStory.getScore());
+                            newHistoryItem.setHotness(updatedRedditStory.getHotness());
+                            newHistoryItem.setComments(updatedRedditStory.getNumComments());
+                            newHistoryItem.setGilded(updatedRedditStory.getGilded());
+
+                            //and then store that history item in the database
+                            storyRepository.addStoryHistory(storyModelLookup.get(updatedRedditStory.getId()), newHistoryItem);
+                            LOGGER.trace("Updated history for " + updatedRedditStory.getId());
+                            historyUpdateMeter.mark();
+                        }
+                    } catch (final RedditClientException redditClientException) {
+                        //catch point - if a RCE is emitted we are just going to ignore this batch and emit an error to log
+                        //the batch will be in the next iteration to be retried
+                        LOGGER.error("Worker received RCE: " + redditClientException);
+                    }
                     }
                 });
 

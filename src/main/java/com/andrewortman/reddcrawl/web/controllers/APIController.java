@@ -1,6 +1,6 @@
 package com.andrewortman.reddcrawl.web.controllers;
 
-import com.andrewortman.reddcrawl.repository.StoryDao;
+import com.andrewortman.reddcrawl.repository.StoryRepository;
 import com.andrewortman.reddcrawl.repository.Views;
 import com.andrewortman.reddcrawl.repository.model.StoryModel;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -22,22 +22,22 @@ import java.util.List;
 public class APIController {
 
     @Nonnull
-    private final StoryDao storyDao;
+    private final StoryRepository storyRepository;
 
     @Autowired
-    public APIController(@Nonnull final StoryDao storyDao) {
-        this.storyDao = storyDao;
+    public APIController(@Nonnull final StoryRepository storyRepository) {
+        this.storyRepository = storyRepository;
     }
 
     @RequestMapping(value = "/story/{id}", method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON)
     @JsonView(Views.Detailed.class)
     public StoryModel getStory(@PathVariable("id") @Nonnull final String storyId) {
-        return storyDao.findStoryByRedditShortId(storyId, true);
+        return storyRepository.findStoryByRedditShortId(storyId, true);
     }
 
     @RequestMapping(value = "/stories", method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON)
     @JsonView(Views.Short.class)
     public List<StoryModel> getTopStories() {
-        return storyDao.getHottestStoriesWithSubreddit(100);
+        return storyRepository.getHottestStoriesWithSubreddit(100);
     }
 }

@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nonnull;
 import javax.ws.rs.ClientErrorException;
 import javax.ws.rs.ProcessingException;
+import javax.ws.rs.RedirectionException;
 import javax.ws.rs.client.*;
 import javax.ws.rs.core.MediaType;
 import java.io.IOException;
@@ -94,7 +95,7 @@ public class RedditClient {
                                 .request(MediaType.APPLICATION_JSON)
                                 .get(JsonNode.class);
                 subListing = new RedditListing<>(jsonNodeResponse, RedditStory.class);
-            } catch (ProcessingException | ClientErrorException | JsonProcessingException e) {
+            } catch (RedirectionException | ProcessingException | ClientErrorException | JsonProcessingException e) {
                 this.clientExceptionMeter.mark();
                 throw new RedditClientException(e);
             }
@@ -203,7 +204,7 @@ public class RedditClient {
                     .request(MediaType.APPLICATION_JSON)
                     .get(JsonNode.class);
             stories = new RedditListing<>(jsonNodeResponse, RedditStory.class);
-        } catch (ProcessingException | ClientErrorException | JsonProcessingException e) {
+        } catch (RedirectionException | ProcessingException | ClientErrorException | JsonProcessingException e) {
             this.clientExceptionMeter.mark();
             throw new RedditClientException(e);
         }
@@ -230,7 +231,7 @@ public class RedditClient {
                     .request(MediaType.APPLICATION_JSON)
                     .get(JsonNode.class);
             return RedditThing.parseThing(jsonNodeResponse, RedditSubreddit.class);
-        } catch (ProcessingException | ClientErrorException e) {
+        } catch (RedirectionException | ProcessingException | ClientErrorException e) {
             this.clientExceptionMeter.mark();
             throw new RedditClientException(e);
         }

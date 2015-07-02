@@ -12,7 +12,7 @@ import java.util.Date;
 import java.util.List;
 
 @Repository
-public class SubredditDaoImpl implements SubredditDao {
+public class SubredditRepositoryImpl implements SubredditRepository {
 
     @PersistenceContext
     private EntityManager entityManager;

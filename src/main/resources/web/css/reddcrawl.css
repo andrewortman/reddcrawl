@@ -1,19 +1,45 @@
-.link-link {
-    font-size: 12pt;
+.story-wrapper {
+    width: 100%;
+    margin-bottom: 10px;
 }
 
-.link-info {
-    font-size: 10pt;
+.story-wrapper .story-scoreblock {
+    display: table-cell;
+    vertical-align: middle;
+    text-align: center;
+    padding-right: 10px;
+    width: 70px;
+    color: grey;
 }
 
-.link-score {
+.story-wrapper .story-scoreblock .score {
     font-size: 14pt;
     font-weight: bold;
     text-align: center;
+    color: black;
 }
 
-.vcenter {
-    position: relative;
-    top: 50%;
-    transform: translateY(-50%);
+.story-wrapper .story-thumbnailblock {
+    display: table-cell;
+    vertical-align: middle;
+    width: 80px;
+    padding-right: 10px;
+}
+
+.story-wrapper .story-thumbnailblock img {
+    border:1px solid black;
+}
+
+.story-infoblock {
+    display:table-cell;
+    vertical-align: middle;
+}
+
+.story-infoblock .link-info {
+    font-size: 10pt;
+}
+
+.story-infoblock .link-link {
+    font-size: 12pt;
+    cursor: pointer;
 }

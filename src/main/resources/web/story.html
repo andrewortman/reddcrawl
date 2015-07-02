@@ -1,27 +1,28 @@
-<div class="row story" style="margin-bottom: 5px" ng-init="showThumbnail=(story.thumbnail && story.thumbnail != '' && story.thumbnail != 'default' && story.thumbnail != 'self' && story.thumbnail != 'nsfw')">
-    <div class="col-md-1 hidden-xs hidden-sm text-muted text-center">
-        <div class="vcenter">
-            <span class="link-score">{{story.score | number : 0 }}</span><br/>
-            upvotes
-        </div>
-    </div>
-    <div class="col-md-1 col-sm-1 hidden-xs" style="padding-left:0" ng-show="{{showThumbnail}}" >
-        <div class="vcenter">
-            <img ng-src="{{showThumbnail ? story.thumbnail : ''}}" style="max-width: 100px; width: 100%"/>
-        </div>
-    </div>
-    <div style="padding:0" class="{{showThumbnail ? 'col-md-10 col-sm-11 col-xs-12' : 'col-sm-11 col-xs-12'}}">
-        <div class="vcenter">
-            <a ng-click="toggleStoryHistory($event)" class="link-link">{{story.title}}</a><br/>
-            <div class="text-muted link-info"><strong>{{story.score}}</strong> upvotes | <strong>{{story.comments}}</strong> comments | <strong>{{story.gilded}}</strong> gilds<br/>
-                Created in <strong>{{story.subreddit.url}}</strong> at {{story.createdAt | date : 'short'}} and discovered {{(story.discoveredAt - story.createdAt)/1000.0 | number : 0 }} seconds later.
+<div class="row">
+    <div class="col-xs-12">
+        <!-- custom layout makes things happy -->
+        <div class="story-wrapper" ng-init="showThumbnail=(story.thumbnail && story.thumbnail != '' && story.thumbnail != 'default' && story.thumbnail != 'self' && story.thumbnail != 'nsfw')">
+            <div class="story-scoreblock">
+                <span class="score">{{story.score | number : 0 }}</span><br/>
+                upvotes
+            </div>
+
+            <div class="story-thumbnailblock" ng-show="showThumbnail">
+                <img ng-src="{{showThumbnail ? story.thumbnail : ''}}" style="max-width: 100px; width: 100%"/>
+            </div>
+
+            <div class="story-infoblock">
+                <a ng-click="toggleStoryHistory()" class="link-link">{{story.title}}</a><br/>
+                <div class="text-muted link-info"><strong>{{story.score}}</strong> upvotes | <strong>{{story.comments}}</strong> comments | <strong>{{story.gilded}}</strong> gilds<br/>
+                    Created in <strong>{{story.subreddit.url}}</strong> at {{story.createdAt | date : 'short'}} and discovered {{(story.discoveredAt - story.createdAt)/1000.0 | number : 0 }} seconds later.
+                </div>
             </div>
         </div>
     </div>
 </div>
-<div class="row story-graph" style="display: none">
+
+<div class="row history-row" style="display: none">
     <div class="col-xs-12">
-        <div ng-hide="showChart" class="text-muted text-center">Loading history..</div>
         <div class="history-chart"></div>
     </div>
 </div>

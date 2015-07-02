@@ -24,17 +24,12 @@
             templateUrl: "story.html",
             restrict: "E",
             link: function(scope, element, attributes) {
-                $timeout(function() {
-                    var height = $(element).find(".story").first().height();
-                    $(element).find(".story [class*=col-]").each(function() {
-                        $(this).height(height);
-                    });
-                }, 0);
+                scope.showChart = false;
 
                 scope.toggleStoryHistory = function() {
                     console.log("click " + scope.story);
-                    $graph = $(element).find(".story-graph").first();
-                    $graph.toggle();
+                    $historyRow = $(element).find(".history-row");
+                    $historyRow.toggle();
 
                     if(!scope.showChart) {
                         $http.get("/api/story/" + scope.story.redditShortId)
@@ -57,14 +52,23 @@
                                     pointSize: 2,
                                     height: 300,
                                     vAxis: {minValue: 0},
-                                    title: res.data.title
+                                    legend: {
+                                        position: 'bottom'
+                                    }
                                 };
 
+                                function drawChart() {
+                                    var chart = new google.visualization.AreaChart($historyRow.find(".history-chart")[0]);
+                                    chart.draw(data, options);
+                                }
+                                drawChart();
                                 // Instantiate and draw our chart, passing in some options.
-                                var chart = new google.visualization.LineChart($graph.find(".history-chart")[0]);
-                                chart.draw(data, options);
                                 scope.showChart = true;
-                            })
+
+                                $(window).resize(function() {
+                                    drawChart();
+                                });
+                            });
                     }
                 }
             }

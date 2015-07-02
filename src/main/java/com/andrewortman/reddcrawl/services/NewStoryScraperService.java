@@ -3,8 +3,8 @@ package com.andrewortman.reddcrawl.services;
 import com.andrewortman.reddcrawl.client.RedditClient;
 import com.andrewortman.reddcrawl.client.RedditClientException;
 import com.andrewortman.reddcrawl.client.models.RedditStory;
-import com.andrewortman.reddcrawl.repository.StoryDao;
-import com.andrewortman.reddcrawl.repository.SubredditDao;
+import com.andrewortman.reddcrawl.repository.StoryRepository;
+import com.andrewortman.reddcrawl.repository.SubredditRepository;
 import com.andrewortman.reddcrawl.repository.model.StoryHistoryModel;
 import com.andrewortman.reddcrawl.repository.model.StoryModel;
 import com.andrewortman.reddcrawl.repository.model.SubredditModel;
@@ -29,10 +29,10 @@ public class NewStoryScraperService extends Service {
     private final RedditClient redditClient;
 
     @Nonnull
-    private final StoryDao storyDao;
+    private final StoryRepository storyRepository;
 
     @Nonnull
-    private final SubredditDao subredditDao;
+    private final SubredditRepository subredditRepository;
 
     @Nonnull
     private final Integer scavengeStoryCount;
@@ -41,13 +41,13 @@ public class NewStoryScraperService extends Service {
     private final Meter storyDiscoveredMeter;
 
     public NewStoryScraperService(@Nonnull final RedditClient redditClient,
-                                  @Nonnull final StoryDao storyDao,
-                                  @Nonnull final SubredditDao subredditDao,
+                                  @Nonnull final StoryRepository storyRepository,
+                                  @Nonnull final SubredditRepository subredditRepository,
                                   @Nonnull final Integer scavengeStoryCount,
                                   @Nonnull final MetricRegistry metricRegistry) {
         this.redditClient = redditClient;
-        this.storyDao = storyDao;
-        this.subredditDao = subredditDao;
+        this.storyRepository = storyRepository;
+        this.subredditRepository = subredditRepository;
         this.scavengeStoryCount = scavengeStoryCount;
         this.storyDiscoveredMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "story", "discovered"));
     }
@@ -57,7 +57,7 @@ public class NewStoryScraperService extends Service {
         //get the subreddits we need to scan
         LOGGER.info("scavenging the hottest stories in the past hour");
         final Set<String> subreddits = new HashSet<>();
-        subreddits.addAll(subredditDao.getAllSubredditNames());
+        subreddits.addAll(subredditRepository.getAllSubredditNames());
 
         if (subreddits.size() == 0) {
             throw new RedditClientException("No subreddits in database - no idea what to fetch for");
@@ -69,14 +69,14 @@ public class NewStoryScraperService extends Service {
 
         for (final RedditStory story : stories) {
             //check if the story already exists, and if it does, bail out
-            final StoryModel foundStory = storyDao.findStoryByRedditShortId(story.getId(), false);
+            final StoryModel foundStory = storyRepository.findStoryByRedditShortId(story.getId(), false);
             if (foundStory != null) {
                 LOGGER.debug("ignoring story " + story.getId() + " because it already exists in db");
                 continue;
             }
 
             //we have the subreddit, so lets make sure the subreddit exists in the db so we can reference it in the db
-            final SubredditModel subreddit = subredditDao.findSubredditByName(story.getSubreddit());
+            final SubredditModel subreddit = subredditRepository.findSubredditByName(story.getSubreddit());
             if (subreddit == null) {
                 LOGGER.error("Subreddit `" + story.getSubreddit() + "` does not exist yet - will not persist story " + story.getId() + " to DB");
                 continue;
@@ -109,7 +109,7 @@ public class NewStoryScraperService extends Service {
             historyModel.setGilded(story.getGilded());
 
             //save!
-            storyDao.saveNewStory(storyModel, historyModel);
+            storyRepository.saveNewStory(storyModel, historyModel);
             storyDiscoveredMeter.mark();
             LOGGER.info("saved new story " + story.getId());
         }

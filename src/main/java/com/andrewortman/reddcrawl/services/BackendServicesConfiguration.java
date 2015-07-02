@@ -4,8 +4,8 @@ import com.andrewortman.reddcrawl.ReddcrawlCommonConfiguration;
 import com.andrewortman.reddcrawl.client.RedditClient;
 import com.andrewortman.reddcrawl.client.RedditClientConfiguration;
 import com.andrewortman.reddcrawl.repository.PersistenceConfiguration;
-import com.andrewortman.reddcrawl.repository.StoryDao;
-import com.andrewortman.reddcrawl.repository.SubredditDao;
+import com.andrewortman.reddcrawl.repository.StoryRepository;
+import com.andrewortman.reddcrawl.repository.SubredditRepository;
 import com.codahale.metrics.MetricRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
@@ -30,11 +30,11 @@ public class BackendServicesConfiguration {
 
     @Autowired
     @Nonnull
-    private StoryDao storyDao;
+    private StoryRepository storyRepository;
 
     @Autowired
     @Nonnull
-    private SubredditDao subredditDao;
+    private SubredditRepository subredditRepository;
 
     @Autowired
     @Nonnull
@@ -43,7 +43,7 @@ public class BackendServicesConfiguration {
     @Bean
     public StoryHistoryUpdaterService storyHistoryUpdaterService() {
         return new StoryHistoryUpdaterService(redditClient,
-                storyDao,
+                storyRepository,
                 environment.getRequiredProperty("service.storyhistoryupdater.workers", Integer.class),
                 environment.getRequiredProperty("service.storyhistoryupdater.oldeststory", Integer.class),
                 environment.getRequiredProperty("service.storyhistoryupdater.interval", Integer.class),
@@ -51,17 +51,24 @@ public class BackendServicesConfiguration {
     }
 
     @Bean
-    public SubredditScraperService subredditScraperService() {
-        return new SubredditScraperService(redditClient,
-                subredditDao,
+    public NewSubredditScraperService newSubredditScraperService() {
+        return new NewSubredditScraperService(redditClient,
+                subredditRepository,
+                metricRegistry);
+    }
+
+    @Bean
+    public SubredditHistoryUpdaterService subredditHistoryUpdaterService() {
+        return new SubredditHistoryUpdaterService(redditClient,
+                subredditRepository,
                 metricRegistry);
     }
 
     @Bean
     public NewStoryScraperService storyScraperService() {
         return new NewStoryScraperService(redditClient,
-                storyDao,
-                subredditDao,
+                storyRepository,
+                subredditRepository,
                 environment.getRequiredProperty("service.newstoryscraper.storycount", Integer.class),
                 metricRegistry);
     }

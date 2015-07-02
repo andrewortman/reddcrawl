@@ -9,7 +9,7 @@
         </layout>
         <filter class="org.apache.log4j.varia.LevelRangeFilter">
             <param name="LevelMax" value="info"/>
-            <param name="LevelMin" value="debug"/>
+            <param name="LevelMin" value="trace"/>
             <param name="AcceptOnMatch" value="true"/>
         </filter>
         <filter class="org.apache.log4j.varia.DenyAllFilter" />

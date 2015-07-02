@@ -12,7 +12,7 @@ import java.util.Date;
 import java.util.List;
 
 @Component
-public class StoryDaoImpl implements StoryDao {
+public class StoryRepositoryImpl implements StoryRepository {
     @PersistenceContext
     private EntityManager entityManager;
 

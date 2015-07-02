@@ -8,7 +8,7 @@ import java.util.Date;
 import java.util.List;
 
 @Repository
-public interface SubredditDao {
+public interface SubredditRepository {
 
     /**
      * Gets a list of all subreddit names currently in the database

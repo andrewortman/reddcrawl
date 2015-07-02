@@ -8,7 +8,7 @@ import java.util.Date;
 import java.util.List;
 
 @Repository
-public interface StoryDao {
+public interface StoryRepository {
     /**
      * Find a story given a short id
      *
