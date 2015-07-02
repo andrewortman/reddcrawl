@@ -60,9 +60,7 @@ public class SubredditHistoryUpdaterService extends Service {
     @Override
     @Transactional
     public void runIteration() throws Exception {
-
         final List<String> subredditNames = subredditRepository.getAllSubredditNames();
-        final Map<SubredditModel, SubredditHistoryModel> historyModelMap = new HashMap<>(subredditNames.size());
 
         for (final String subredditName : subredditNames) {
             LOGGER.info("Fetching subreddit details for subreddit " + subredditName);
@@ -77,7 +75,6 @@ public class SubredditHistoryUpdaterService extends Service {
             historyModel.setSubscribers(redditSubreddit.getSubscribers());
             historyModel.setActive(redditSubreddit.getActive());
             historyModel.setCommentHideMins(redditSubreddit.getCommentScoreHideMins());
-            historyModelMap.put(subredditModel, historyModel);
             subredditRepository.addSubredditHistory(subredditModel, historyModel);
             historyUpdateMeter.mark();
         }
