@@ -36,6 +36,14 @@ public class SubredditRepositoryImpl implements SubredditRepository {
     }
 
     @Override
+    public List<SubredditModel> findSubredditsNeedingUpdate(final Date lastUpdateTime) {
+        return entityManager
+                .createQuery("SELECT s from subreddit s where s.updatedAt < :lastUpdateTime", SubredditModel.class)
+                .setParameter("lastUpdateTime", lastUpdateTime)
+                .getResultList();
+    }
+
+    @Override
     @Transactional
     public SubredditModel saveNewSubreddit(final SubredditModel subredditModel) {
         subredditModel.setCreatedAt(new Date());

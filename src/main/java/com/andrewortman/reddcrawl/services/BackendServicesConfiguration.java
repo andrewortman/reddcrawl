@@ -61,7 +61,8 @@ public class BackendServicesConfiguration {
     public SubredditHistoryUpdaterService subredditHistoryUpdaterService() {
         return new SubredditHistoryUpdaterService(redditClient,
                 subredditRepository,
-                metricRegistry);
+                metricRegistry,
+                environment.getRequiredProperty("service.subreddithistoryupdater.interval", Integer.class));
     }
 
     @Bean

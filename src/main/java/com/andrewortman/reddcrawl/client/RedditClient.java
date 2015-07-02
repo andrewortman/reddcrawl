@@ -63,6 +63,13 @@ public class RedditClient {
                     clientRequestMeter.mark();
                 }
             })
+            .register(new ClientResponseFilter() {
+                @Override
+                public void filter(final ClientRequestContext requestContext, final ClientResponseContext responseContext) throws IOException {
+                    final Meter responseMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "client", "responses", String.valueOf(responseContext.getStatus())));
+                    responseMeter.mark();
+                }
+            })
             .target(baseUri);
     }
 

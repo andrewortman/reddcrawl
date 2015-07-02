@@ -18,6 +18,12 @@ public interface SubredditRepository {
     List<String> getAllSubredditNames();
 
     /**
+     * Get a list of subreddits needing a history update
+     * @param lastUpdateTime a date in time in which the last update time should before before to be consider update-worthy
+     */
+    List<SubredditModel> findSubredditsNeedingUpdate(Date lastUpdateTime);
+
+    /**
      * Find the subreddit by it's name - like 'funny'
      *
      * @param name the subreddit name
