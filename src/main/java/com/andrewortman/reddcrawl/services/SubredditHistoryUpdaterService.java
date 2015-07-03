@@ -69,7 +69,13 @@ public class SubredditHistoryUpdaterService extends Service {
 
     @Override
     public void runIteration() throws Exception {
-        final Date latestDate = new Date(new Date().getTime() - TimeUnit.SECONDS.toMillis(updateIntervalSeconds));
+
+        //todo: clean up: make runIteration receive a variable if this is a recovery run so we dont have to add a buffer and handle errors
+        //in a special way.
+
+        //add 5 seconds for buffer so we don't miss anything.. since this doesn't happen very often
+        final Date latestDate = new Date(new Date().getTime() - TimeUnit.SECONDS.toMillis(updateIntervalSeconds) + 5000);
+
         final List<SubredditModel> subredditsNeedingUpdate = subredditRepository.findSubredditsNeedingUpdate(latestDate);
 
         for (final SubredditModel subredditModel : subredditsNeedingUpdate) {
@@ -80,7 +86,7 @@ public class SubredditHistoryUpdaterService extends Service {
             //(perhaps attempt retries at the client side or create a new "ignorable error" exception)
             try {
                 redditSubreddit = redditClient.getSubredditByName(subredditModel.getName());
-            } catch(final RedditClientException redditClientException) {
+            } catch (final RedditClientException redditClientException) {
                 //if the subreddit went private, we'll receive a forbidden exception, so we need to handle that special case
                 //I had to do this when IAMA went private on July 2nd, 2015
                 if (redditClientException.getCause() instanceof ForbiddenException) {

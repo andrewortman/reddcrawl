@@ -19,6 +19,7 @@ public interface SubredditRepository {
 
     /**
      * Get a list of subreddits needing a history update
+     *
      * @param lastUpdateTime a date in time in which the last update time should before before to be consider update-worthy
      */
     List<SubredditModel> findSubredditsNeedingUpdate(Date lastUpdateTime);

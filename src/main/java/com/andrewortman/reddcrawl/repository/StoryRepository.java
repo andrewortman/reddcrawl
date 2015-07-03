@@ -4,6 +4,8 @@ import com.andrewortman.reddcrawl.repository.model.StoryHistoryModel;
 import com.andrewortman.reddcrawl.repository.model.StoryModel;
 import org.springframework.stereotype.Repository;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.Date;
 import java.util.List;
 
@@ -16,7 +18,8 @@ public interface StoryRepository {
      * @param includeHistories whether or not to fetch histories with the story
      * @return StoryModel or null if not exists
      */
-    public StoryModel findStoryByRedditShortId(final String redditShortId, final boolean includeHistories);
+    @Nullable
+    public StoryModel findStoryByRedditShortId(@Nonnull final String redditShortId, final boolean includeHistories);
 
     /**
      * Gets a Top N list of the hottest stories being tracked
@@ -24,7 +27,8 @@ public interface StoryRepository {
      * @param limit max number of results
      * @return List of storyModels, without histories preloaded
      */
-    List<StoryModel> getHottestStories(Integer limit);
+    @Nonnull
+    List<StoryModel> getHottestStories(int limit);
 
     /**
      * Gets a Top N list of the hottest stories being tracked with subreddit information joined in eagerly
@@ -32,7 +36,8 @@ public interface StoryRepository {
      * @param limit max number of results
      * @return List of storyModels, without histories preloaded
      */
-    List<StoryModel> getHottestStoriesWithSubreddit(Integer limit);
+    @Nonnull
+    List<StoryModel> getHottestStoriesWithSubreddit(int limit);
 
     /**
      * Finds stories that need an update
@@ -42,7 +47,8 @@ public interface StoryRepository {
      * @param limit              the max number of results to return
      * @return a list of stories needing update
      */
-    List<StoryModel> findStoriesNeedingUpdate(Date earliestCreateTime, Date lastUpdateTime, int limit);
+    @Nonnull
+    List<StoryModel> findStoriesNeedingUpdate(@Nonnull Date earliestCreateTime, @Nonnull Date lastUpdateTime, int limit);
 
     /**
      * Save a newly discovered story
@@ -51,16 +57,17 @@ public interface StoryRepository {
      * @param partialHistory First history element
      * @return The StoryModel that was saved
      */
-    StoryModel saveNewStory(StoryModel partialStory, StoryHistoryModel partialHistory);
+    @Nonnull
+    StoryModel saveNewStory(@Nonnull StoryModel partialStory, @Nonnull StoryHistoryModel partialHistory);
 
     /**
      * Adds a story history item to a story
      *
      * @param story       Story Model to update
-     * @param historyItem History item to insert
+     * @param historyItem History item to insert - if null, this will not create a history line item, but update the checked time
      * @return boolean if story model was updated
      */
-    boolean addStoryHistory(StoryModel story, StoryHistoryModel historyItem);
+    boolean addStoryHistory(@Nonnull StoryModel story, @Nullable StoryHistoryModel historyItem);
 
     /**
      * Returns an list of all associated history items for the story
@@ -68,5 +75,6 @@ public interface StoryRepository {
      * @param storyModel the story to find all the histories for
      * @return in-order (by time) list of story history items
      */
-    List<StoryHistoryModel> getStoryHistory(StoryModel storyModel);
+    @Nonnull
+    List<StoryHistoryModel> getStoryHistory(@Nonnull StoryModel storyModel);
 }

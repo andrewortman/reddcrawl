@@ -107,4 +107,5 @@ public class StoryHistoryModel {
     public void setGilded(final Integer gilded) {
         this.gilded = gilded;
     }
+
 }

@@ -52,25 +52,25 @@ public class RedditClient {
         this.clientRequestMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "client", "requests"));
         this.clientExceptionMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "client", "exceptions"));
         this.redditEndpoint = ClientBuilder.newClient()
-            .property(ClientProperties.READ_TIMEOUT, readTimeout)
-            .property(ClientProperties.CONNECT_TIMEOUT, connectTimeout)
-            .register(new UserAgentClientRequestFilter(userAgent))
-            .register(new RateLimitingClientRequestFilter(rateLimiter))
-            .register(new ClientRequestFilter() {
-                @Override
-                public void filter(final ClientRequestContext requestContext) throws IOException {
-                    LOGGER.debug("Making request to " + requestContext.getUri());
-                    clientRequestMeter.mark();
-                }
-            })
-            .register(new ClientResponseFilter() {
-                @Override
-                public void filter(final ClientRequestContext requestContext, final ClientResponseContext responseContext) throws IOException {
-                    final Meter responseMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "client", "responses", String.valueOf(responseContext.getStatus())));
-                    responseMeter.mark();
-                }
-            })
-            .target(baseUri);
+                .property(ClientProperties.READ_TIMEOUT, readTimeout)
+                .property(ClientProperties.CONNECT_TIMEOUT, connectTimeout)
+                .register(new UserAgentClientRequestFilter(userAgent))
+                .register(new RateLimitingClientRequestFilter(rateLimiter))
+                .register(new ClientRequestFilter() {
+                    @Override
+                    public void filter(final ClientRequestContext requestContext) throws IOException {
+                        LOGGER.debug("Making request to " + requestContext.getUri());
+                        clientRequestMeter.mark();
+                    }
+                })
+                .register(new ClientResponseFilter() {
+                    @Override
+                    public void filter(final ClientRequestContext requestContext, final ClientResponseContext responseContext) throws IOException {
+                        final Meter responseMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "client", "responses", String.valueOf(responseContext.getStatus())));
+                        responseMeter.mark();
+                    }
+                })
+                .target(baseUri);
     }
 
     /**

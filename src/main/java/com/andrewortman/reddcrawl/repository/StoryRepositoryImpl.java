@@ -4,6 +4,8 @@ import com.andrewortman.reddcrawl.repository.model.StoryHistoryModel;
 import com.andrewortman.reddcrawl.repository.model.StoryModel;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.persistence.EntityManager;
 import javax.persistence.NoResultException;
 import javax.persistence.PersistenceContext;
@@ -17,7 +19,8 @@ public class StoryRepositoryImpl implements StoryRepository {
     private EntityManager entityManager;
 
     @Override
-    public StoryModel findStoryByRedditShortId(final String redditShortId, final boolean includeHistories) {
+    @Nullable
+    public StoryModel findStoryByRedditShortId(@Nonnull final String redditShortId, final boolean includeHistories) {
         final String query = "SELECT s from story s "
                 + (includeHistories ? "left join fetch s.history" : "") +
                 " where s.redditShortId = :redditShortId";
@@ -32,22 +35,25 @@ public class StoryRepositoryImpl implements StoryRepository {
     }
 
     @Override
-    public List<StoryModel> getHottestStories(final Integer limit) {
+    @Nonnull
+    public List<StoryModel> getHottestStories(final int limit) {
         return entityManager.createQuery("SELECT s FROM story s order by s.hotness desc", StoryModel.class)
                 .setMaxResults(limit)
                 .getResultList();
     }
 
     @Override
-    public List<StoryModel> getHottestStoriesWithSubreddit(final Integer limit) {
+    @Nonnull
+    public List<StoryModel> getHottestStoriesWithSubreddit(final int limit) {
         return entityManager.createQuery("SELECT s FROM story s left join fetch s.subreddit as subreddit order by s.hotness desc", StoryModel.class)
                 .setMaxResults(limit)
                 .getResultList();
     }
 
     @Override
+    @Nonnull
     @Transactional
-    public StoryModel saveNewStory(final StoryModel partialStory, final StoryHistoryModel partialHistory) {
+    public StoryModel saveNewStory(@Nonnull final StoryModel partialStory, @Nonnull final StoryHistoryModel partialHistory) {
         try {
             final StoryModel foundStory = findStoryByRedditShortId(partialStory.getRedditShortId(), false);
             if (foundStory != null) {
@@ -59,6 +65,7 @@ public class StoryRepositoryImpl implements StoryRepository {
 
         partialStory.setDiscoveredAt(partialHistory.getTimestamp());
         partialStory.setUpdatedAt(partialHistory.getTimestamp());
+        partialStory.setCheckedAt(partialHistory.getTimestamp());
         partialStory.setHotness(partialHistory.getHotness());
         partialStory.setScore(partialHistory.getScore());
         partialStory.setComments(partialHistory.getComments());
@@ -73,38 +80,52 @@ public class StoryRepositoryImpl implements StoryRepository {
 
     @Override
     @Transactional
-    public boolean addStoryHistory(final StoryModel storyModel, final StoryHistoryModel historyItem) {
-        //do a directed update
-        final int numRows = entityManager.createQuery("UPDATE story s set " +
-                "s.updatedAt=current_timestamp, s.hotness=:hotness, s.score=:score, s.comments=:comments, s.gilded=:gilded " +
-                "where s.id=:id")
-                .setParameter("hotness", historyItem.getHotness())
-                .setParameter("score", historyItem.getScore())
-                .setParameter("comments", historyItem.getComments())
-                .setParameter("gilded", historyItem.getGilded())
-                .setParameter("id", storyModel.getId())
-                .executeUpdate();
+    public boolean addStoryHistory(@Nonnull final StoryModel storyModel,
+                                   @Nullable final StoryHistoryModel historyItem) {
+        if (historyItem != null) {
+            //the history item exists
+            final int numRows = entityManager.createQuery("UPDATE story s set " +
+                    "s.updatedAt=current_timestamp, s.checkedAt=current_timestamp, s.hotness=:hotness, s.score=:score, s.comments=:comments, s.gilded=:gilded " +
+                    "where s.id=:id")
+                    .setParameter("hotness", historyItem.getHotness())
+                    .setParameter("score", historyItem.getScore())
+                    .setParameter("comments", historyItem.getComments())
+                    .setParameter("gilded", historyItem.getGilded())
+                    .setParameter("id", storyModel.getId())
+                    .executeUpdate();
 
-        if (numRows > 0) {
-            historyItem.setStory(storyModel);
-            entityManager.persist(historyItem);
-            return true;
+            if (numRows > 0) {
+                historyItem.setStory(storyModel);
+                entityManager.persist(historyItem);
+                return true;
+            }
+        } else {
+            //history item was null (no history item was returned by reddit, but we should still mark it as checked)
+            final int numRows = entityManager.createQuery("UPDATE story s set s.checkedAt=current_timestamp where s.id=:id")
+                    .setParameter("id", storyModel.getId())
+                    .executeUpdate();
+
+            return numRows > 0;
         }
 
         return false;
     }
 
     @Override
-    public List<StoryModel> findStoriesNeedingUpdate(final Date earliestCreateTime, final Date lastUpdateTime, final int limit) {
-        return entityManager.createQuery("SELECT s FROM story s WHERE s.updatedAt < :lastUpdateTime and s.discoveredAt > :earliestCreateTime ORDER BY s.hotness DESC", StoryModel.class)
-                .setParameter("lastUpdateTime", lastUpdateTime)
+    @Nonnull
+    public List<StoryModel> findStoriesNeedingUpdate(@Nonnull final Date earliestCreateTime,
+                                                     @Nonnull final Date lastCheckTime,
+                                                     final int limit) {
+        return entityManager.createQuery("SELECT s FROM story s WHERE s.checkedAt < :lastUpdateTime and s.discoveredAt > :earliestCreateTime ORDER BY s.hotness DESC", StoryModel.class)
+                .setParameter("lastUpdateTime", lastCheckTime)
                 .setParameter("earliestCreateTime", earliestCreateTime)
                 .setMaxResults(limit)
                 .getResultList();
     }
 
     @Override
-    public List<StoryHistoryModel> getStoryHistory(final StoryModel storyModel) {
+    @Nonnull
+    public List<StoryHistoryModel> getStoryHistory(@Nonnull final StoryModel storyModel) {
         return entityManager.createQuery("SELECT h FROM story_history h WHERE h.story = :story ORDER BY h.timestamp ASC", StoryHistoryModel.class)
                 .setParameter("story", storyModel)
                 .getResultList();

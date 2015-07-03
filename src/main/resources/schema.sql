@@ -65,6 +65,7 @@ CREATE TABLE story
   gilded          INTEGER                     NOT NULL,
   discovered_at   TIMESTAMP WITHOUT TIME ZONE NOT NULL,
   updated_at      TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+  checked_at      TIMESTAMP WITHOUT TIME ZONE NOT NULL,
   CONSTRAINT story_pkey PRIMARY KEY (id),
   CONSTRAINT unique_story_short_id UNIQUE (reddit_short_id),
   CONSTRAINT subreddit_fk FOREIGN KEY (subreddit)
@@ -75,10 +76,10 @@ WITH (
 OIDS =FALSE
 );
 
-CREATE INDEX story_hotness_idxx
+CREATE INDEX story_hotness_idx
 ON story
 USING BTREE
-(hotness DESC, updated_at DESC, created_at DESC);
+(hotness DESC, checked_at DESC, created_at DESC);
 
 CREATE INDEX story_subreddit_idx
 ON story
@@ -100,7 +101,7 @@ CREATE TABLE story_history
   ON UPDATE NO ACTION ON DELETE CASCADE
 );
 
-CREATE INDEX story_history_story_timestamp_idx
+CREATE INDEX story_history_story_idx
 ON story_history
 USING BTREE
-(story, "timestamp" DESC);
+(story DESC);

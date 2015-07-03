@@ -13,6 +13,7 @@ import java.util.Date;
  */
 @Entity(name = "subreddit")
 public class SubredditModel {
+    @Nonnull
     @Id
     @Column(name = "id", nullable = false)
     @GeneratedValue(strategy = GenerationType.IDENTITY)

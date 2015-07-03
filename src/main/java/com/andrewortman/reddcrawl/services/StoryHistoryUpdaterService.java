@@ -40,9 +40,19 @@ public class StoryHistoryUpdaterService extends Service {
     @Nonnull
     private final Integer historyUpdateIntervalInSeconds;
 
+    //marks the times when we bailed because we had no more stories to update (should be never if system is saturated)
+    @Nonnull
+    private final Meter historyBailMeter;
+
+    //marks the times the history was updated succesfully (we asked reddit for history, and actually got it back)
     @Nonnull
     private final Meter historyUpdateMeter;
 
+    //marks the times the history was even checked (we simply asked reddit for history - doesn't mean we got it back)
+    @Nonnull
+    private final Meter historyCheckedMeter;
+
+    //batch size histogram (to know what the rough batch size is - should remain at workers * 100 if the system is saturated)
     @Nonnull
     private final Histogram historyUpdateBatchHistogram;
 
@@ -57,8 +67,10 @@ public class StoryHistoryUpdaterService extends Service {
         this.numUpdateWorkers = numUpdateWorkers;
         this.oldestStoryAgeInSeconds = oldestStoryAgeInSeconds;
         this.historyUpdateIntervalInSeconds = historyUpdateIntervalInSeconds;
-        this.historyUpdateMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "story", "history_updates"));
-        this.historyUpdateBatchHistogram = metricRegistry.histogram(MetricRegistry.name("reddcrawl", "story", "history_update_batch_size"));
+        this.historyBailMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "story", "history", "bails"));
+        this.historyUpdateMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "story", "history", "updates"));
+        this.historyCheckedMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "story", "history", "checks"));
+        this.historyUpdateBatchHistogram = metricRegistry.histogram(MetricRegistry.name("reddcrawl", "story", "history", "batch_size"));
     }
 
     @Override
@@ -81,6 +93,7 @@ public class StoryHistoryUpdaterService extends Service {
             historyUpdateBatchHistogram.update(storiesNeedingUpdate.size());
 
             if (storiesNeedingUpdate.size() == 0) {
+                this.historyBailMeter.mark();
                 LOGGER.info("no stories needing updating - bailing");
                 return;
             }
@@ -95,36 +108,52 @@ public class StoryHistoryUpdaterService extends Service {
                 final Thread thread = new Thread(new Runnable() {
                     @Override
                     public void run() {
-                    try {
-                        //in each thread, we are going to first convert the story map into a lookup table
-                        final HashMap<String, StoryModel> storyModelLookup = new HashMap<>();
-                        for (final StoryModel storyModel : storyBatchItem) {
-                            storyModelLookup.put(storyModel.getRedditShortId(), storyModel);
-                        }
+                        try {
+                            //in each thread, we are going to first convert the story map into a lookup table
+                            final HashMap<String, StoryModel> storyModelLookup = new HashMap<>();
+                            for (final StoryModel storyModel : storyBatchItem) {
+                                storyModelLookup.put(storyModel.getRedditShortId(), storyModel);
+                            }
 
-                        //and then we will request the list of story ids to be updated via the redditclient
-                        LOGGER.info("Updating " + storyModelLookup.size() + " stories");
-                        final Map<String, RedditStory> storiesUpdated = redditClient.getStoriesById(storyModelLookup.keySet());
-                        LOGGER.info("Received back " + storiesUpdated.size() + " stories from reddit");
-                        //then we will create story history items with them
-                        for (final RedditStory updatedRedditStory : storiesUpdated.values()) {
-                            final StoryHistoryModel newHistoryItem = new StoryHistoryModel();
-                            newHistoryItem.setTimestamp(new Date());
-                            newHistoryItem.setScore(updatedRedditStory.getScore());
-                            newHistoryItem.setHotness(updatedRedditStory.getHotness());
-                            newHistoryItem.setComments(updatedRedditStory.getNumComments());
-                            newHistoryItem.setGilded(updatedRedditStory.getGilded());
+                            //and then we will request the list of story ids to be updated via the redditclient
+                            LOGGER.info("Updating " + storyModelLookup.size() + " stories");
+                            final Map<String, RedditStory> storiesUpdated = redditClient.getStoriesById(storyModelLookup.keySet());
+                            LOGGER.info("Received back " + storiesUpdated.size() + " stories from reddit");
 
-                            //and then store that history item in the database
-                            storyRepository.addStoryHistory(storyModelLookup.get(updatedRedditStory.getId()), newHistoryItem);
-                            LOGGER.trace("Updated history for " + updatedRedditStory.getId());
-                            historyUpdateMeter.mark();
+
+                            //then we will create story history items with them
+                            for (final String storyId : storyModelLookup.keySet()) {
+
+                                final StoryHistoryModel newHistoryItem;
+                                if (storiesUpdated.containsKey(storyId)) {
+                                    final RedditStory updatedRedditStory = storiesUpdated.get(storyId);
+                                    newHistoryItem = new StoryHistoryModel();
+                                    newHistoryItem.setTimestamp(new Date());
+                                    newHistoryItem.setScore(updatedRedditStory.getScore());
+                                    newHistoryItem.setHotness(updatedRedditStory.getHotness());
+                                    newHistoryItem.setComments(updatedRedditStory.getNumComments());
+                                    newHistoryItem.setGilded(updatedRedditStory.getGilded());
+                                } else {
+                                    //if you pass null to addStoryHistory, it will mark it as checked but not updated
+                                    newHistoryItem = null;
+                                }
+
+                                //and then store that history item in the database
+                                storyRepository.addStoryHistory(storyModelLookup.get(storyId), newHistoryItem);
+                                historyCheckedMeter.mark(); //mark the checked meter so we know the story was at least marked as 'checked'
+                                if (newHistoryItem == null) {
+                                    LOGGER.debug("Could not update history for " + storyId + " - marked as just checked");
+
+                                } else {
+                                    LOGGER.trace("Updated history for " + storyId);
+                                    historyUpdateMeter.mark(); //mark as updated succesfully
+                                }
+                            }
+                        } catch (final RedditClientException redditClientException) {
+                            //catch point - if a RCE is emitted we are just going to ignore this batch and emit an error to log
+                            //the batch will be in the next iteration to be retried
+                            LOGGER.error("Worker received RCE: " + redditClientException);
                         }
-                    } catch (final RedditClientException redditClientException) {
-                        //catch point - if a RCE is emitted we are just going to ignore this batch and emit an error to log
-                        //the batch will be in the next iteration to be retried
-                        LOGGER.error("Worker received RCE: " + redditClientException);
-                    }
                     }
                 });
 
@@ -133,9 +162,8 @@ public class StoryHistoryUpdaterService extends Service {
                 thread.start();
             }
 
-            //join all the threads together
+            //join all the threads together.. timeouts will stop the threads from hanging
             for (final Thread thread : workerThreads) {
-                //todo: should we add a timeout in here? use a executor pool and do futures?
                 thread.join();
             }
         }

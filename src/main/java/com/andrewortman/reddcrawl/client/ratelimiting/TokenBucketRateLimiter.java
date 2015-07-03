@@ -38,12 +38,12 @@ public class TokenBucketRateLimiter implements RateLimiter {
 
         //register a gauge that monitors the current token count
         metricRegistry.register(MetricRegistry.name("reddcrawl", "client", "tokens"),
-            new Gauge<Integer>() {
-                @Override
-                public Integer getValue() {
-                    return currentTokenCount;
-                }
-            });
+                new Gauge<Integer>() {
+                    @Override
+                    public Integer getValue() {
+                        return currentTokenCount;
+                    }
+                });
     }
 
     @Override
