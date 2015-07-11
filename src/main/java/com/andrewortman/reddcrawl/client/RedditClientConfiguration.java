@@ -23,11 +23,13 @@ public class RedditClientConfiguration {
     private MetricRegistry metricsRegistry;
 
     @Bean
+    @Nonnull
     public RateLimiter tokenBucketRateLimiter() {
         return new TokenBucketRateLimiter(environment.getRequiredProperty("client.rpm", Integer.class), metricsRegistry);
     }
 
     @Bean
+    @Nonnull
     public RedditClient redditClient(@Nonnull final RateLimiter rateLimiter) {
         return new RedditClient(environment.getRequiredProperty("client.useragent"),
                 environment.getRequiredProperty("client.timeout.connect", Integer.class),

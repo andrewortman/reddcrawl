@@ -15,6 +15,7 @@ import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
+import javax.annotation.Nonnull;
 import javax.persistence.EntityManagerFactory;
 import javax.sql.DataSource;
 import java.sql.SQLException;
@@ -33,6 +34,7 @@ public class PersistenceConfiguration {
     private Environment env;
 
     @Bean
+    @Nonnull
     public DataSource pgDataSource() throws SQLException {
         final BasicDataSource ds = new BasicDataSource();
         ds.setDriverClassName(env.getProperty("db.driver"));
@@ -46,30 +48,30 @@ public class PersistenceConfiguration {
     }
 
     @Bean
+    @Nonnull
     public EntityManagerFactory entityManagerFactory() throws SQLException {
+
+        final Properties properties = new Properties();
+        properties.setProperty("hibernate.dialect", env.getProperty("db.hibernate.dialect"));
+        properties.setProperty("hibernate.hbm2ddl.auto", env.getProperty("db.hibernate.hbm2ddl.auto"));
+        properties.setProperty("hibernate.temp.use_jdbc_metadata_defaults", "false");
+
         final LocalContainerEntityManagerFactoryBean factory = new LocalContainerEntityManagerFactoryBean();
         factory.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
         factory.setJpaDialect(new HibernateJpaDialect());
         factory.setDataSource(pgDataSource());
         factory.setPackagesToScan(this.getClass().getPackage().getName());
-        factory.setJpaProperties(this.additionalProperties());
+        factory.setJpaProperties(properties);
         factory.afterPropertiesSet();
 
         return factory.getObject();
     }
 
     @Bean
+    @Nonnull
     PlatformTransactionManager transactionManager() throws SQLException {
         final JpaTransactionManager transactionManager = new JpaTransactionManager();
         transactionManager.setEntityManagerFactory(entityManagerFactory());
         return transactionManager;
-    }
-
-    private Properties additionalProperties() {
-        final Properties properties = new Properties();
-        properties.setProperty("hibernate.dialect", env.getProperty("db.hibernate.dialect"));
-        properties.setProperty("hibernate.hbm2ddl.auto", env.getProperty("db.hibernate.hbm2ddl.auto"));
-        properties.setProperty("hibernate.temp.use_jdbc_metadata_defaults", "false");
-        return properties;
     }
 }

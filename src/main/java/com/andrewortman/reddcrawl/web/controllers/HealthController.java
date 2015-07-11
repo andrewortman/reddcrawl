@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.annotation.Nonnull;
 import javax.sql.DataSource;
 import java.io.IOException;
 
@@ -21,6 +22,7 @@ public class HealthController {
         this.dataSource = dataSource;
     }
 
+    @Nonnull
     @RequestMapping(method = RequestMethod.GET,
             produces = MediaType.TEXT_PLAIN_VALUE,
             value = "/health/db")
@@ -28,7 +30,7 @@ public class HealthController {
         try {
             dataSource.getConnection();
             return new ResponseEntity<String>("IMOK", HttpStatus.OK);
-        } catch (final Exception e) {
+        } catch (@Nonnull final Exception e) {
             return new ResponseEntity<String>("NOTOK", HttpStatus.SERVICE_UNAVAILABLE);
         }
     }

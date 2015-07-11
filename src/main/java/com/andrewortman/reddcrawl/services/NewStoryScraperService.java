@@ -14,9 +14,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 /**
  * This service will scrape the top stories for the hour and add newly discovered stories to the database
@@ -34,8 +33,9 @@ public class NewStoryScraperService extends Service {
     @Nonnull
     private final SubredditRepository subredditRepository;
 
-    @Nonnull
-    private final Integer scavengeStoryCount;
+    private final int scavengeStoryCount;
+
+    private final int subredditExpirationHours;
 
     @Nonnull
     private final Meter storyDiscoveredMeter;
@@ -43,12 +43,14 @@ public class NewStoryScraperService extends Service {
     public NewStoryScraperService(@Nonnull final RedditClient redditClient,
                                   @Nonnull final StoryRepository storyRepository,
                                   @Nonnull final SubredditRepository subredditRepository,
-                                  @Nonnull final Integer scavengeStoryCount,
+                                  final int scavengeStoryCount,
+                                  final int subredditExpirationHours,
                                   @Nonnull final MetricRegistry metricRegistry) {
         this.redditClient = redditClient;
         this.storyRepository = storyRepository;
         this.subredditRepository = subredditRepository;
         this.scavengeStoryCount = scavengeStoryCount;
+        this.subredditExpirationHours = subredditExpirationHours;
         this.storyDiscoveredMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "story", "discovered"));
     }
 
@@ -56,31 +58,32 @@ public class NewStoryScraperService extends Service {
     public void runIteration() throws Exception {
         //get the subreddits we need to scan
         LOGGER.info("scavenging the hottest stories in the past hour");
-        final Set<String> subreddits = new HashSet<>();
-        subreddits.addAll(subredditRepository.getAllSubredditNames());
+        final Map<String, SubredditModel> subreddits = new HashMap<>();
+        final Date expirationDate = new Date(new Date().getTime() - TimeUnit.HOURS.toMillis(subredditExpirationHours));
+        final List<SubredditModel> subredditModels = subredditRepository.getAllRecentlySeenSubreddits(expirationDate);
+        for (final SubredditModel subredditModel : subredditModels) {
+            subreddits.put(subredditModel.getName(), subredditModel);
+        }
 
         if (subreddits.size() == 0) {
             throw new RedditClientException("No subreddits in database - no idea what to fetch for");
         }
 
         //get the top N stories in an aggregated view of those subreddits
-        final Set<RedditStory> stories = redditClient.getStoryListingForSubreddits(subreddits,
+        final Set<RedditStory> stories = redditClient.getStoryListingForSubreddits(subreddits.keySet(),
                 RedditClient.SortStyle.TOP, RedditClient.TimeRange.HOUR, this.scavengeStoryCount);
 
         for (final RedditStory story : stories) {
             //check if the story already exists, and if it does, bail out
-            final StoryModel foundStory = storyRepository.findStoryByRedditShortId(story.getId(), false);
+            final StoryModel foundStory = storyRepository.findStoryByRedditShortId(story.getId());
             if (foundStory != null) {
                 LOGGER.debug("ignoring story " + story.getId() + " because it already exists in db");
                 continue;
             }
 
-            //we have the subreddit, so lets make sure the subreddit exists in the db so we can reference it in the db
-            final SubredditModel subreddit = subredditRepository.findSubredditByName(story.getSubreddit());
-            if (subreddit == null) {
+            if (!subreddits.containsKey(story.getSubreddit())) {
                 LOGGER.error("Subreddit `" + story.getSubreddit() + "` does not exist yet - will not persist story " + story.getId() + " to DB");
                 continue;
-
             }
 
             //create the story model
@@ -89,7 +92,7 @@ public class NewStoryScraperService extends Service {
             storyModel.setCreatedAt(story.getCreatedAt());
             storyModel.setTitle(story.getTitle());
             storyModel.setAuthor(story.getAuthor());
-            storyModel.setSubreddit(subreddit);
+            storyModel.setSubreddit(subreddits.get(story.getSubreddit()));
             storyModel.setUrl(story.getUrl());
             storyModel.setDomain(story.getDomain());
             storyModel.setThumbnail(story.getThumbnail());

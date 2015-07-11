@@ -1,10 +1,12 @@
 package com.andrewortman.reddcrawl.services;
 
+import com.codahale.metrics.MetricRegistry;
 import org.joda.time.DateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -17,12 +19,14 @@ import java.util.concurrent.TimeUnit;
  */
 public class ServiceManager {
     @Nonnull
-    private final Map<Service, Thread> serviceThreadMap = new HashMap<>();
-
-    @Nonnull
     private static final Logger LOGGER = LoggerFactory.getLogger(ServiceManager.class);
+    @Nonnull
+    private final Map<Service, Thread> serviceThreadMap = new HashMap<>();
+    @Nonnull
+    private final MetricRegistry metricRegistry;
 
-    public ServiceManager() {
+    public ServiceManager(@Nonnull final MetricRegistry metricRegistry) {
+        this.metricRegistry = metricRegistry;
         //set up shutdown hook for clean shutdowns
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
             @Override
@@ -46,6 +50,7 @@ public class ServiceManager {
      */
     public void addService(@Nonnull final Service service) {
         final Thread thread = new Thread(new Runnable() {
+            @Nonnull
             private DateTime lastRunTime = DateTime.now();
 
             @Override
@@ -55,10 +60,18 @@ public class ServiceManager {
                     boolean exceptionOccurred = false;
                     try {
                         LOGGER.info("Starting service '" + service.getClass().getName() + "'");
+                        metricRegistry.counter(MetricRegistry.name("reddcrawl", "services", service.getClass().getSimpleName(), "runs")).inc();
+
+                        //run the iteration and time it
+                        final long startTime = new Date().getTime();
                         service.runIteration();
-                    } catch (final Exception e) {
+                        final long endTime = new Date().getTime();
+                        metricRegistry.timer(MetricRegistry.name("reddcrawl", "service", service.getClass().getSimpleName(), "time")).update((endTime - startTime), TimeUnit.MILLISECONDS);
+                    } catch (@Nonnull final Exception e) {
+                        //handle the exception for a service
                         exceptionOccurred = true;
                         LoggerFactory.getLogger(service.getClass()).error("ServiceManager caught exception: " + e.getClass().getName() + " - " + e.getMessage(), e);
+                        metricRegistry.counter(MetricRegistry.name("reddcrawl", "services", service.getClass().getSimpleName(), "exceptions")).inc();
                     }
 
                     final DateTime nextStartTime;
@@ -75,7 +88,7 @@ public class ServiceManager {
                         while (nextStartTime.isAfter(DateTime.now())) {
                             try {
                                 Thread.sleep(TimeUnit.SECONDS.toMillis(1));
-                            } catch (final InterruptedException ignored) {
+                            } catch (@Nonnull final InterruptedException ignored) {
                                 LOGGER.info("Received InterruptedException - bailing during sleep");
                             }
                         }

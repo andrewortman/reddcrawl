@@ -8,6 +8,8 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import javax.annotation.Nonnull;
+
 public abstract class RedditThing {
     //static object mapper - handles single value arrays
     public static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
@@ -23,11 +25,11 @@ public abstract class RedditThing {
      * @return The reddit thing
      * @throws RedditClientException if any validation mishap happens, it is thrown via RedditClientException
      */
-    public static <T extends RedditThing> T parseThing(final JsonNode node, final Class<T> thingClass)
+    public static <T extends RedditThing> T parseThing(@Nonnull final JsonNode node, @Nonnull final Class<T> thingClass)
             throws RedditClientException {
         //first determine if it is the right thing
         final String kind = node.path("kind").asText();
-        final RedditModel modelForThing = (RedditModel) thingClass.getAnnotation(RedditModel.class);
+        final RedditModel modelForThing = thingClass.getAnnotation(RedditModel.class);
         if (modelForThing == null) {
             throw new RedditClientException("Class is not annotated with a model - not sure what to do with it");
         }
@@ -45,13 +47,12 @@ public abstract class RedditThing {
 
         try {
             return OBJECT_MAPPER.treeToValue(dataNode, thingClass);
-        } catch (final JsonProcessingException e) {
+        } catch (@Nonnull final JsonProcessingException e) {
             //wrap jsonprocessingexception with ta reddit client exception
             throw new RedditClientException(e);
         }
     }
 
-    public String getFullId() {
-        return "";
-    }
+    @Nonnull
+    public abstract String getFullId();
 }

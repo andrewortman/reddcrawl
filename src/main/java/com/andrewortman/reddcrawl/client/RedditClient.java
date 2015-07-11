@@ -20,7 +20,10 @@ import javax.annotation.Nonnull;
 import javax.ws.rs.ClientErrorException;
 import javax.ws.rs.ProcessingException;
 import javax.ws.rs.RedirectionException;
-import javax.ws.rs.client.*;
+import javax.ws.rs.client.ClientBuilder;
+import javax.ws.rs.client.ClientRequestContext;
+import javax.ws.rs.client.ClientRequestFilter;
+import javax.ws.rs.client.WebTarget;
 import javax.ws.rs.core.MediaType;
 import java.io.IOException;
 import java.util.*;
@@ -30,8 +33,8 @@ import java.util.*;
  * everything reddcrawl needs to crawl reddit including JSON parsing and rate limiting.
  */
 public class RedditClient {
-    private static final Logger LOGGER = LoggerFactory.getLogger(RedditClient.class);
     public static final int MAX_ITEMS_PER_LISTING_PAGE = 100;
+    private static final Logger LOGGER = LoggerFactory.getLogger(RedditClient.class);
 
     @Nonnull
     private final Meter clientRequestMeter;
@@ -44,13 +47,15 @@ public class RedditClient {
 
 
     public RedditClient(@Nonnull final String userAgent,
-                        @Nonnull final Integer connectTimeout,
-                        @Nonnull final Integer readTimeout,
+                        final int connectTimeout,
+                        final int readTimeout,
                         @Nonnull final String baseUri,
                         @Nonnull final RateLimiter rateLimiter,
                         @Nonnull final MetricRegistry metricRegistry) {
+
         this.clientRequestMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "client", "requests"));
         this.clientExceptionMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "client", "exceptions"));
+
         this.redditEndpoint = ClientBuilder.newClient()
                 .property(ClientProperties.READ_TIMEOUT, readTimeout)
                 .property(ClientProperties.CONNECT_TIMEOUT, connectTimeout)
@@ -61,13 +66,6 @@ public class RedditClient {
                     public void filter(final ClientRequestContext requestContext) throws IOException {
                         LOGGER.debug("Making request to " + requestContext.getUri());
                         clientRequestMeter.mark();
-                    }
-                })
-                .register(new ClientResponseFilter() {
-                    @Override
-                    public void filter(final ClientRequestContext requestContext, final ClientResponseContext responseContext) throws IOException {
-                        final Meter responseMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "client", "responses", String.valueOf(responseContext.getStatus())));
-                        responseMeter.mark();
                     }
                 })
                 .target(baseUri);
@@ -83,15 +81,15 @@ public class RedditClient {
      * @return set of reddit stories found in the search
      * @throws RedditClientException
      */
+    @Nonnull
     public Set<RedditStory> getStoryListingForSubreddits(@Nonnull final Set<String> subreddits,
                                                          @Nonnull final SortStyle sort,
                                                          @Nonnull final TimeRange timeRange,
-                                                         @Nonnull final Integer limit) throws RedditClientException {
+                                                         final int limit) throws RedditClientException {
         final Set<RedditStory> stories = new LinkedHashSet<>();
         String currentAfter = "";
-        Integer lastCount = 0;
+        int lastCount = 0;
         while (stories.size() < limit) {
-
             final RedditListing<RedditStory> subListing;
             try {
                 final JsonNode jsonNodeResponse =
@@ -102,7 +100,7 @@ public class RedditClient {
                                 .request(MediaType.APPLICATION_JSON)
                                 .get(JsonNode.class);
                 subListing = new RedditListing<>(jsonNodeResponse, RedditStory.class);
-            } catch (RedirectionException | ProcessingException | ClientErrorException | JsonProcessingException e) {
+            } catch (@Nonnull RedirectionException | ProcessingException | ClientErrorException | JsonProcessingException e) {
                 this.clientExceptionMeter.mark();
                 throw new RedditClientException(e);
             }
@@ -132,10 +130,11 @@ public class RedditClient {
      * @param limit max number of front page stories to return
      * @return set of reddit stories in order seen (order probably shouldn't be trusted though)
      */
-    public Set<RedditStory> getFrontPageStories(@Nonnull final Integer limit) throws RedditClientException {
+    @Nonnull
+    public Set<RedditStory> getFrontPageStories(final int limit) throws RedditClientException {
         final LinkedHashSet<RedditStory> stories = new LinkedHashSet<>();
         String currentAfter = "";
-        Integer lastCount = 0;
+        int lastCount = 0;
         while (stories.size() < limit) {
             final RedditListing<RedditStory> subListing;
             try {
@@ -145,7 +144,7 @@ public class RedditClient {
                         .request(MediaType.APPLICATION_JSON)
                         .get(JsonNode.class);
                 subListing = new RedditListing<>(jsonNodeResponse, RedditStory.class);
-            } catch (ClientErrorException | JsonProcessingException e) {
+            } catch (@Nonnull ClientErrorException | JsonProcessingException e) {
                 this.clientExceptionMeter.mark();
                 throw new RedditClientException(e);
             }
@@ -175,6 +174,7 @@ public class RedditClient {
      * @return Set of subreddits that are part
      * @throws RedditClientException
      */
+    @Nonnull
     public Set<String> getDefaultFrontPageSubreddits() throws RedditClientException {
         //the trick is to get the top 300 front page stories on reddit. This should be cached
         //3 is arbitrary, the higher the more likely we'll cover all front page reddits
@@ -195,6 +195,7 @@ public class RedditClient {
      * @return map of story id -> story pairs, not guaranteed though to exist
      * @throws RedditClientException
      */
+    @Nonnull
     public Map<String, RedditStory> getStoriesById(@Nonnull final Set<String> storyShortIds) throws RedditClientException {
         Preconditions.checkArgument(storyShortIds.size() <= MAX_ITEMS_PER_LISTING_PAGE,
                 "Cannot request more than " + MAX_ITEMS_PER_LISTING_PAGE + " stories by id at a given time");
@@ -211,13 +212,13 @@ public class RedditClient {
                     .request(MediaType.APPLICATION_JSON)
                     .get(JsonNode.class);
             stories = new RedditListing<>(jsonNodeResponse, RedditStory.class);
-        } catch (RedirectionException | ProcessingException | ClientErrorException | JsonProcessingException e) {
+        } catch (@Nonnull RedirectionException | ProcessingException | ClientErrorException | JsonProcessingException e) {
             this.clientExceptionMeter.mark();
             throw new RedditClientException(e);
         }
 
         //convert to a map
-        final Map<String, RedditStory> storyMap = new LinkedHashMap<String, RedditStory>(storyShortIds.size());
+        final Map<String, RedditStory> storyMap = new LinkedHashMap<>(storyShortIds.size());
         for (final RedditStory story : stories) {
             storyMap.put(story.getId(), story);
         }
@@ -238,7 +239,7 @@ public class RedditClient {
                     .request(MediaType.APPLICATION_JSON)
                     .get(JsonNode.class);
             return RedditThing.parseThing(jsonNodeResponse, RedditSubreddit.class);
-        } catch (RedirectionException | ProcessingException | ClientErrorException e) {
+        } catch (@Nonnull RedirectionException | ProcessingException | ClientErrorException e) {
             this.clientExceptionMeter.mark();
             throw new RedditClientException(e);
         }
@@ -247,6 +248,7 @@ public class RedditClient {
     /**
      * Sort style for listing requests
      */
+    @SuppressWarnings("unused")
     public enum SortStyle {
         TOP("top"), CONTROVERSIAL("controversial"),
         HOT("hot"), NEW("new");
@@ -266,6 +268,7 @@ public class RedditClient {
     /**
      * Time range for /top and /controversial SortStyles - this doesn't work on any other sort styles
      */
+    @SuppressWarnings("unused")
     public enum TimeRange {
         HOUR("hour"), DAY("day"), WEEK("week"),
         MONTH("month"), YEAR("year"), ALL("all");

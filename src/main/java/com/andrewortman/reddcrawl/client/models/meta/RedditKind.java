@@ -7,7 +7,7 @@ public enum RedditKind {
 
     private final String key;
 
-    RedditKind(String key) {
+    RedditKind(final String key) {
         this.key = key;
     }
 

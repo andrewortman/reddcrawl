@@ -23,13 +23,13 @@ public class RateLimitingClientRequestFilter implements ClientRequestFilter {
     }
 
     @Override
-    public void filter(@Nonnull final ClientRequestContext requestContext) throws IOException {
+    public void filter(final ClientRequestContext requestContext) throws IOException {
         final long msToWait = limiter.getAmountOfTimeToSleep();
         if (msToWait > 0) {
             try {
                 LOGGER.debug("RateLimiter told me to wait {} ms. Thread sleeping", msToWait);
                 Thread.sleep(msToWait);
-            } catch (final InterruptedException e) {
+            } catch (@Nonnull final InterruptedException e) {
                 LOGGER.warn("bailing out before request - received InterruptedException");
                 throw new IOException(e);
             }

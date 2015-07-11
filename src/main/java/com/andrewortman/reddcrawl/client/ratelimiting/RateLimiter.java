@@ -5,5 +5,5 @@ package com.andrewortman.reddcrawl.client.ratelimiting;
  * sure we obey reddit's API policy.
  */
 public interface RateLimiter {
-    Long getAmountOfTimeToSleep();
+    long getAmountOfTimeToSleep();
 }

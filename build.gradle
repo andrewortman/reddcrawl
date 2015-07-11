@@ -32,8 +32,8 @@ dependencies {
     compile 'com.fasterxml.jackson.core:jackson-core:2.5.3'
     compile 'com.fasterxml.jackson.core:jackson-databind:2.5.3'
 
-    //jsr code analysis
-    compile 'com.google.code.findbugs:jsr305:3.0.0'
+    //google cloud storage client
+    compile 'com.google.appengine.tools:appengine-gcs-client:0.4.4'
 
     //logging
     compile 'org.slf4j:slf4j-log4j12:1.7.12'
@@ -41,9 +41,13 @@ dependencies {
     //for metrics / optional datadog reporting
     compile 'io.dropwizard.metrics:metrics-core:3.1.2'
     compile 'org.coursera:metrics-datadog:1.1.1'
+    compile 'com.signalfx.public:signalfx-codahale:0.0.20'
 
     //for testing
     testCompile group: 'junit', name: 'junit', version: '4.11'
+
+    //jsr code analysis
+    compile 'com.google.code.findbugs:jsr305:3.0.0'
 }
 
 buildscript {

@@ -21,9 +21,6 @@ public class RedditListing<T extends RedditThing> extends RedditThing implements
     private final String after;
 
     @Nonnull
-    private final String modhash;
-
-    @Nonnull
     private final List<T> children;
 
     public RedditListing(@Nonnull final JsonNode rootNode,
@@ -39,7 +36,6 @@ public class RedditListing<T extends RedditThing> extends RedditThing implements
 
         this.before = dataNode.path("before").asText("");
         this.after = dataNode.path("after").asText("");
-        this.modhash = dataNode.path("before").asText();
 
         final JsonNode arrayNode = dataNode.path("children");
         this.children = new ArrayList<T>(arrayNode.size());
@@ -48,25 +44,31 @@ public class RedditListing<T extends RedditThing> extends RedditThing implements
         }
     }
 
+    @Nonnull
     public String getBefore() {
         return before;
     }
 
+    @Nonnull
     public String getAfter() {
         return after;
     }
 
-    public String getModhash() {
-        return modhash;
-    }
-
+    @Nonnull
     public List<T> getChildren() {
         return children;
     }
 
     @Override
+    @Nonnull
     public Iterator<T> iterator() {
         return children.iterator();
     }
 
+
+    @Nonnull
+    @Override
+    public String getFullId() {
+        return "Listing";
+    }
 }

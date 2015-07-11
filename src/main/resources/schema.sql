@@ -12,16 +12,26 @@ CREATE TABLE subreddit
   submission_type TEXT                        NOT NULL,
   created_at      TIMESTAMP WITHOUT TIME ZONE NOT NULL,
   updated_at      TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+  seen_at         TIMESTAMP WITHOUT TIME ZONE NOT NULL,
   CONSTRAINT subreddit_pkey PRIMARY KEY (id),
   CONSTRAINT unique_subrreddit_short_id UNIQUE (reddit_short_id),
   CONSTRAINT unique_subrreddit_name UNIQUE (name)
 );
 
-
 CREATE INDEX subreddit_names_idx
 ON subreddit
 USING BTREE
 (name);
+
+CREATE INDEX subreddit_seen_at_idx
+ON subreddit
+USING BTREE
+(seen_at);
+
+CREATE INDEX subreddit_updated_at_idx
+ON subreddit
+USING BTREE
+(updated_at);
 
 CREATE TABLE subreddit_history
 (
@@ -71,9 +81,6 @@ CREATE TABLE story
   CONSTRAINT subreddit_fk FOREIGN KEY (subreddit)
   REFERENCES subreddit (id) MATCH SIMPLE
   ON UPDATE NO ACTION ON DELETE CASCADE
-)
-WITH (
-OIDS =FALSE
 );
 
 CREATE INDEX story_hotness_idx

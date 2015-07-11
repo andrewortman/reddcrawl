@@ -1,9 +1,5 @@
 package com.andrewortman.reddcrawl.repository.model;
 
-import com.andrewortman.reddcrawl.repository.Views;
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonView;
-
 import javax.annotation.Nonnull;
 import javax.persistence.*;
 import java.util.Date;
@@ -11,85 +7,78 @@ import java.util.Date;
 /**
  * Holds the representation of a single entry of reddit subreddit history in the database
  */
+@SuppressWarnings("NullableProblems")
 @Entity(name = "subreddit_history")
 public class SubredditHistoryModel {
     @Id
-    @Nonnull
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @JsonView(Views.Short.class)
-    private Long id;
+    private long id;
 
     @Nonnull
     @ManyToOne(optional = false)
     @JoinColumn(name = "subreddit", nullable = false)
-    @JsonIgnore
     private SubredditModel subreddit;
 
     @Nonnull
     @Column(name = "timestamp", nullable = false)
-    @JsonView(Views.Short.class)
     private Date timestamp;
 
-    @Nonnull
     @Column(name = "subscribers", nullable = false)
-    @JsonView(Views.Short.class)
-    private Long subscribers;
+    private long subscribers;
 
-    @Nonnull
     @Column(name = "active", nullable = false)
-    @JsonView(Views.Short.class)
-    private Integer active;
+    private int active;
 
-    @Nonnull
     @Column(name = "comment_hide_mins", nullable = false)
-    @JsonView(Views.Short.class)
-    private Integer commentHideMins;
+    private int commentHideMins;
 
-    public Long getId() {
+    public long getId() {
         return id;
     }
 
-    public void setId(final Long id) {
+    public void setId(final long id) {
         this.id = id;
     }
 
+    @Nonnull
     public SubredditModel getSubreddit() {
         return subreddit;
     }
 
-    public void setSubreddit(final SubredditModel subreddit) {
+    public void setSubreddit(@Nonnull final SubredditModel subreddit) {
         this.subreddit = subreddit;
     }
 
+    @Nonnull
     public Date getTimestamp() {
         return new Date(timestamp.getTime());
     }
 
-    public void setTimestamp(final Date timestamp) {
+    public void setTimestamp(@Nonnull final Date timestamp) {
         this.timestamp = new Date(timestamp.getTime());
     }
 
-    public Long getSubscribers() {
+    public long getSubscribers() {
         return subscribers;
     }
 
-    public void setSubscribers(final Long subscribers) {
+    public void setSubscribers(final long subscribers) {
         this.subscribers = subscribers;
     }
 
-    public Integer getActive() {
+    public int getActive() {
         return active;
     }
 
-    public void setActive(final Integer active) {
+    public void setActive(final int active) {
         this.active = active;
     }
 
-    public Integer getCommentHideMins() {
+    public int getCommentHideMins() {
         return commentHideMins;
     }
 
-    public void setCommentHideMins(final Integer commentHideMins) {
+    public void setCommentHideMins(final int commentHideMins) {
         this.commentHideMins = commentHideMins;
     }
 }

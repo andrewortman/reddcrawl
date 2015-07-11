@@ -18,7 +18,7 @@ public class UserAgentClientRequestFilter implements ClientRequestFilter {
     }
 
     @Override
-    public void filter(@Nonnull final ClientRequestContext requestContext) throws IOException {
+    public void filter(final ClientRequestContext requestContext) throws IOException {
         requestContext.getHeaders().add("User-Agent", this.userAgent);
     }
 }

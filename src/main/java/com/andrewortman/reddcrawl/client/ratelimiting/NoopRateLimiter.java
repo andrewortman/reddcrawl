@@ -5,7 +5,7 @@ package com.andrewortman.reddcrawl.client.ratelimiting;
  */
 public class NoopRateLimiter implements RateLimiter {
     @Override
-    public Long getAmountOfTimeToSleep() {
+    public long getAmountOfTimeToSleep() {
         return 0L;
     }
 }

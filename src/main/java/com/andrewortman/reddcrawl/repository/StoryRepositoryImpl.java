@@ -20,32 +20,21 @@ public class StoryRepositoryImpl implements StoryRepository {
 
     @Override
     @Nullable
-    public StoryModel findStoryByRedditShortId(@Nonnull final String redditShortId, final boolean includeHistories) {
-        final String query = "SELECT s from story s "
-                + (includeHistories ? "left join fetch s.history" : "") +
-                " where s.redditShortId = :redditShortId";
-
+    public StoryModel findStoryByRedditShortId(@Nonnull final String redditShortId) {
         try {
-            return entityManager.createQuery(query, StoryModel.class)
+            return entityManager.createQuery("SELECT s from story s where s.redditShortId = :redditShortId", StoryModel.class)
                     .setParameter("redditShortId", redditShortId)
                     .getSingleResult();
-        } catch (final NoResultException ignored) {
+        } catch (@Nonnull final NoResultException ignored) {
             return null;
         }
     }
 
     @Override
     @Nonnull
-    public List<StoryModel> getHottestStories(final int limit) {
-        return entityManager.createQuery("SELECT s FROM story s order by s.hotness desc", StoryModel.class)
-                .setMaxResults(limit)
-                .getResultList();
-    }
-
-    @Override
-    @Nonnull
-    public List<StoryModel> getHottestStoriesWithSubreddit(final int limit) {
-        return entityManager.createQuery("SELECT s FROM story s left join fetch s.subreddit as subreddit order by s.hotness desc", StoryModel.class)
+    public List<StoryModel> getHottestStories(final int limit, final boolean fetchSubreddit) {
+        final String query = "SELECT s FROM story s " + (fetchSubreddit ? "left join fetch s.subreddit as subreddit" : "") + " order by s.hotness desc";
+        return entityManager.createQuery(query, StoryModel.class)
                 .setMaxResults(limit)
                 .getResultList();
     }
@@ -55,11 +44,11 @@ public class StoryRepositoryImpl implements StoryRepository {
     @Transactional
     public StoryModel saveNewStory(@Nonnull final StoryModel partialStory, @Nonnull final StoryHistoryModel partialHistory) {
         try {
-            final StoryModel foundStory = findStoryByRedditShortId(partialStory.getRedditShortId(), false);
+            final StoryModel foundStory = findStoryByRedditShortId(partialStory.getRedditShortId());
             if (foundStory != null) {
                 return foundStory;
             }
-        } catch (final NoResultException ignored) {
+        } catch (@Nonnull final NoResultException ignored) {
             //ignored - this means a story should be saved
         }
 
@@ -116,11 +105,29 @@ public class StoryRepositoryImpl implements StoryRepository {
     public List<StoryModel> findStoriesNeedingUpdate(@Nonnull final Date earliestCreateTime,
                                                      @Nonnull final Date lastCheckTime,
                                                      final int limit) {
-        return entityManager.createQuery("SELECT s FROM story s WHERE s.checkedAt < :lastUpdateTime and s.discoveredAt > :earliestCreateTime ORDER BY s.hotness DESC", StoryModel.class)
+        return entityManager.createQuery("SELECT s FROM story s WHERE s.checkedAt <= :lastUpdateTime and s.discoveredAt >= :earliestCreateTime ORDER BY s.hotness DESC", StoryModel.class)
                 .setParameter("lastUpdateTime", lastCheckTime)
                 .setParameter("earliestCreateTime", earliestCreateTime)
                 .setMaxResults(limit)
                 .getResultList();
+    }
+
+    @Nonnull
+    @Override
+    public List<StoryModel> findArchivableStories(@Nonnull final Date latestCreateDate, final int limit) {
+        return entityManager.createQuery("SELECT s from story s WHERE s.createdAt <= :latestCreateDate", StoryModel.class)
+                .setParameter("latestCreateDate", latestCreateDate)
+                .setMaxResults(limit)
+                .getResultList();
+    }
+
+    @Nonnull
+    @Override
+    @Transactional
+    public Integer deleteStories(@Nonnull final List<StoryModel> stories) {
+        return entityManager.createQuery("DELETE from story s where s in :stories")
+                .setParameter("stories", stories)
+                .executeUpdate();
     }
 
     @Override

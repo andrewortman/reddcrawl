@@ -6,27 +6,23 @@ import com.andrewortman.reddcrawl.web.WebConfiguration;
 import org.eclipse.jetty.server.HttpConnectionFactory;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
-import org.eclipse.jetty.server.handler.ResourceHandler;
 import org.eclipse.jetty.servlet.DefaultServlet;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.util.resource.Resource;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.core.env.Environment;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.context.support.AnnotationConfigWebApplicationContext;
 import org.springframework.web.servlet.DispatcherServlet;
 
+import javax.annotation.Nonnull;
 import java.net.URL;
 import java.util.Arrays;
 import java.util.List;
 
-//@Import({WebConfiguration.class, BackendServicesConfiguration.class})
 public final class Application {
-    private static final Logger LOGGER = LoggerFactory.getLogger(Application.class);
-
+    @Nonnull
     public static ServletContextHandler getServletContextHandler(final WebApplicationContext context) {
         final ServletContextHandler contextHandler = new ServletContextHandler();
         contextHandler.addServlet(new ServletHolder(new DispatcherServlet(context)), "/api/*");
@@ -40,20 +36,15 @@ public final class Application {
         return contextHandler;
     }
 
-    public static ResourceHandler getServletResourceHandler() {
-        final ResourceHandler resourceHandler = new ResourceHandler();
-        resourceHandler.setBaseResource(Resource.newClassPathResource("/web"));
-
-        return resourceHandler;
-    }
-
+    @Nonnull
     public static AnnotationConfigWebApplicationContext getContext() {
         final AnnotationConfigWebApplicationContext context = new AnnotationConfigWebApplicationContext();
         context.setConfigLocation(WebConfiguration.class.getName());
         return context;
     }
 
-    public static ServerConnector getServerConnector(final Server server, final Integer port) {
+    @Nonnull
+    public static ServerConnector getServerConnector(final Server server, final int port) {
         final ServerConnector http = new ServerConnector(server,
                 new HttpConnectionFactory());
         http.setPort(port);
@@ -74,7 +65,7 @@ public final class Application {
             final AnnotationConfigWebApplicationContext context = getContext();
 
             final Environment environment = context.getEnvironment();
-            final Integer httpPort = environment.getProperty("http.port", Integer.class, 8085);
+            final int httpPort = environment.getProperty("http.port", Integer.class, 8085);
 
             final Server server = new Server();
 

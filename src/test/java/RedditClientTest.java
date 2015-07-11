@@ -20,7 +20,7 @@ public class RedditClientTest {
     @Test
     public void testGetFrontPageSubreddits() throws RedditClientException {
         //there should be at least 45 subreddits (can burst to 50, depending on the day)
-        assertTrue(client.getDefaultFrontPageSubreddits().size() >= 45);
+        assertTrue(client.getDefaultFrontPageSubreddits().size() >= 48);
     }
 
     @Test
@@ -74,7 +74,7 @@ public class RedditClientTest {
 
     @Test
     public void getSubredditByName() throws RedditClientException {
-        final RedditSubreddit subreddit = client.getSubredditByName("gaybros");
-        assertEquals("gaybros", subreddit.getName());
+        final RedditSubreddit subreddit = client.getSubredditByName("blog");
+        assertEquals("blog", subreddit.getName());
     }
 }

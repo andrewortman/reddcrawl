@@ -12,9 +12,10 @@
             </div>
 
             <div class="story-infoblock">
-                <a ng-click="toggleStoryHistory()" class="link-link">{{story.title}}</a><br/>
-                <div class="text-muted link-info"><strong>{{story.score}}</strong> upvotes | <strong>{{story.comments}}</strong> comments | <strong>{{story.gilded}}</strong> gilds<br/>
-                    Created in <strong>{{story.subreddit.url}}</strong> at {{story.createdAt | date : 'short'}} and discovered {{(story.discoveredAt - story.createdAt)/1000.0 | number : 0 }} seconds later.
+                <a class="link-link">
+                    <a href="http://reddit.com{{story.permalink}}" target="parent">{{story.title}}</a>
+                    <div class="text-muted link-info"><strong>{{story.score}}</strong> upvotes | <strong>{{story.comments}}</strong> comments | <strong>{{story.gilded}}</strong> gilds. <a ng-click="toggleStoryHistory()">See history</a><br/>
+                    Created in <strong>/r/{{story.subreddit}}</strong> at {{story.createdAt | date : 'short'}} and discovered {{(story.discoveredAt - story.createdAt)/1000.0 | number : 0 }} seconds later.
                 </div>
             </div>
         </div>

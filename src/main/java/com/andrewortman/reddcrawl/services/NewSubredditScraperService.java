@@ -30,6 +30,9 @@ public class NewSubredditScraperService extends Service {
     @Nonnull
     private final Meter subredditDiscoveryMeter;
 
+    @Nonnull
+    private final Meter subredditSeenMeter;
+
     public NewSubredditScraperService(@Nonnull final RedditClient redditClient,
                                       @Nonnull final SubredditRepository subredditRepository,
                                       @Nonnull final MetricRegistry metricRegistry) {
@@ -38,6 +41,7 @@ public class NewSubredditScraperService extends Service {
 
         //metrics
         this.subredditDiscoveryMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "subreddit", "discovered"));
+        this.subredditSeenMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "subreddit", "seen"));
     }
 
     @Override
@@ -62,12 +66,16 @@ public class NewSubredditScraperService extends Service {
 
                 subredditRepository.saveNewSubreddit(newSubredditModel);
                 this.subredditDiscoveryMeter.mark();
+            } else {
+                LOGGER.debug("marking " + subredditModel.getName() + " as seen");
+                subredditRepository.markSubredditAsSeen(subredditModel);
+                this.subredditSeenMeter.mark();
             }
         }
     }
 
     @Override
     public int getMinimumRepetitionTimeInSeconds() {
-        return 3 * 60 * 60; //every 3 hours
+        return 60 * 60; //every hour
     }
 }

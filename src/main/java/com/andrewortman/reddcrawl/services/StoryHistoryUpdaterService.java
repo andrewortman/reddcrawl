@@ -149,7 +149,7 @@ public class StoryHistoryUpdaterService extends Service {
                                     historyUpdateMeter.mark(); //mark as updated succesfully
                                 }
                             }
-                        } catch (final RedditClientException redditClientException) {
+                        } catch (@Nonnull final RedditClientException redditClientException) {
                             //catch point - if a RCE is emitted we are just going to ignore this batch and emit an error to log
                             //the batch will be in the next iteration to be retried
                             LOGGER.error("Worker received RCE: " + redditClientException);

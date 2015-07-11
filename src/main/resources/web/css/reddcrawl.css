@@ -1,3 +1,7 @@
+a {
+    cursor: pointer;
+}
+
 .story-wrapper {
     width: 100%;
     margin-bottom: 10px;
@@ -41,5 +45,4 @@
 
 .story-infoblock .link-link {
     font-size: 12pt;
-    cursor: pointer;
 }

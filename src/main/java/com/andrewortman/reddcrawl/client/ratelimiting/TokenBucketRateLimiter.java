@@ -21,16 +21,14 @@ public class TokenBucketRateLimiter implements RateLimiter {
 
     private static final Logger logger = LoggerFactory.getLogger(TokenBucketRateLimiter.class);
 
-    @Nonnull
-    private final Integer maxRequestsPerMinute;
+    private final int maxRequestsPerMinute;
 
-    @Nonnull
-    private Integer currentTokenCount = 0;
+    private int currentTokenCount = 0;
 
     @Nonnull
     private DateTime lastTokenInsertTime = DateTime.now();
 
-    public TokenBucketRateLimiter(@Nonnull final Integer maxRequestsPerMinute,
+    public TokenBucketRateLimiter(final int maxRequestsPerMinute,
                                   @Nonnull final MetricRegistry metricRegistry) {
         lastTokenInsertTime = DateTime.now();
         this.maxRequestsPerMinute = maxRequestsPerMinute;
@@ -39,6 +37,7 @@ public class TokenBucketRateLimiter implements RateLimiter {
         //register a gauge that monitors the current token count
         metricRegistry.register(MetricRegistry.name("reddcrawl", "client", "tokens"),
                 new Gauge<Integer>() {
+                    @Nonnull
                     @Override
                     public Integer getValue() {
                         return currentTokenCount;
@@ -47,7 +46,7 @@ public class TokenBucketRateLimiter implements RateLimiter {
     }
 
     @Override
-    public Long getAmountOfTimeToSleep() {
+    public long getAmountOfTimeToSleep() {
         synchronized (this) {
             logger.debug("get amount of time requested from thread {}", Thread.currentThread().getName());
             final DateTime currentTime = DateTime.now();

@@ -14,30 +14,21 @@ public interface StoryRepository {
     /**
      * Find a story given a short id
      *
-     * @param redditShortId    the short id from reddit
-     * @param includeHistories whether or not to fetch histories with the story
+     * @param redditShortId the short id from reddit
      * @return StoryModel or null if not exists
      */
     @Nullable
-    public StoryModel findStoryByRedditShortId(@Nonnull final String redditShortId, final boolean includeHistories);
+    StoryModel findStoryByRedditShortId(@Nonnull final String redditShortId);
 
     /**
      * Gets a Top N list of the hottest stories being tracked
      *
-     * @param limit max number of results
+     * @param limit          max number of results
+     * @param fetchSubreddit fetch the subreddit information along with each story
      * @return List of storyModels, without histories preloaded
      */
     @Nonnull
-    List<StoryModel> getHottestStories(int limit);
-
-    /**
-     * Gets a Top N list of the hottest stories being tracked with subreddit information joined in eagerly
-     *
-     * @param limit max number of results
-     * @return List of storyModels, without histories preloaded
-     */
-    @Nonnull
-    List<StoryModel> getHottestStoriesWithSubreddit(int limit);
+    List<StoryModel> getHottestStories(int limit, boolean fetchSubreddit);
 
     /**
      * Finds stories that need an update
@@ -49,6 +40,25 @@ public interface StoryRepository {
      */
     @Nonnull
     List<StoryModel> findStoriesNeedingUpdate(@Nonnull Date earliestCreateTime, @Nonnull Date lastUpdateTime, int limit);
+
+    /**
+     * Get stories that were created before a specific time
+     *
+     * @param latestCreateDate the latest timestamp in which the story was created
+     * @param limit            max number of stories to return
+     * @return list of all stories created before latestCreateDate
+     */
+    @Nonnull
+    List<StoryModel> findArchivableStories(@Nonnull final Date latestCreateDate, int limit);
+
+    /**
+     * Removes the stories and associated data with those stories from the database. Use this after archiving to a file
+     *
+     * @param stories List of story models to remove
+     * @return Number of stories actually removed
+     */
+    @Nonnull
+    Integer deleteStories(@Nonnull final List<StoryModel> stories);
 
     /**
      * Save a newly discovered story

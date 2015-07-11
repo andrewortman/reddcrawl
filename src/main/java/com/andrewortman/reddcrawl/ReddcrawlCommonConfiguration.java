@@ -2,6 +2,7 @@ package com.andrewortman.reddcrawl;
 
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.base.Strings;
+import com.signalfx.codahale.reporter.SignalFxReporter;
 import org.coursera.metrics.datadog.DatadogReporter;
 import org.coursera.metrics.datadog.transport.HttpTransport;
 import org.slf4j.Logger;
@@ -17,6 +18,7 @@ import javax.annotation.Nonnull;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -33,27 +35,37 @@ public class ReddcrawlCommonConfiguration {
 
     private final static Logger LOGGER = LoggerFactory.getLogger(ReddcrawlCommonConfiguration.class);
 
+    @Nonnull
     @Bean
     public static PropertySourcesPlaceholderConfigurer propertyPlaceholder() {
         return new PropertySourcesPlaceholderConfigurer();
     }
 
+    @Nonnull
     @Bean
     public MetricRegistry metricsRegistry(@Nonnull final Environment environment) throws UnknownHostException {
         final MetricRegistry metricRegistry = new MetricRegistry();
         final String datadogAPIKey = environment.getProperty("metrics.datadog.apikey");
+        final String signalFxAPIKey = environment.getProperty("metrics.signalfx.apikey");
         if (!Strings.isNullOrEmpty(datadogAPIKey)) {
             final HttpTransport httpTransport = new HttpTransport.Builder()
                     .withApiKey(datadogAPIKey).build();
 
             final DatadogReporter reporter = DatadogReporter.forRegistry(metricRegistry)
-                    .withExpansions(DatadogReporter.Expansion.ALL)
+                    .withExpansions(EnumSet.of(DatadogReporter.Expansion.COUNT,
+                            DatadogReporter.Expansion.MAX,
+                            DatadogReporter.Expansion.MIN,
+                            DatadogReporter.Expansion.MEDIAN,
+                            DatadogReporter.Expansion.MEDIAN,
+                            DatadogReporter.Expansion.RATE_15_MINUTE,
+                            DatadogReporter.Expansion.RATE_5_MINUTE,
+                            DatadogReporter.Expansion.RATE_1_MINUTE))
                     .withHost(InetAddress.getLocalHost().getHostName())
                     .withTags(Collections.singletonList("reddcrawl"))
                     .withTransport(httpTransport)
                     .build();
 
-            final Integer intervalSeconds = environment.getProperty("metrics.datadog.interval", Integer.class, 10);
+            final int intervalSeconds = environment.getProperty("metrics.datadog.interval", Integer.class, 10);
             reporter.start(intervalSeconds, TimeUnit.SECONDS);
 
             LOGGER.info("Started datadog logging - emitting events every " + intervalSeconds + " seconds");
@@ -61,9 +73,17 @@ public class ReddcrawlCommonConfiguration {
             LOGGER.info("Datadog logging omitted - no api key set in configuration");
         }
 
+        if (!Strings.isNullOrEmpty(signalFxAPIKey)) {
+            final SignalFxReporter signalFxReporter = new SignalFxReporter.Builder(metricRegistry, signalFxAPIKey).build();
+            final int intervalSeconds = environment.getProperty("metrics.signalfx.interval", Integer.class, 5);
+            signalFxReporter.start(intervalSeconds, TimeUnit.SECONDS);
+
+            LOGGER.info("Started SignalFX logging - emitting events every " + intervalSeconds + " seconds");
+        } else {
+            LOGGER.info("SignalFX logging omitted - no api key set in configuration");
+        }
+
         return metricRegistry;
-
-
     }
 
 }

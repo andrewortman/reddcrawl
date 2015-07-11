@@ -32,20 +32,11 @@ public class RedditStory extends RedditThing {
     @Nonnull
     private final String domain;
 
-    @Nonnull
-    private final Boolean isSelf;
+    private final int numComments;
 
-    @Nonnull
-    private final Integer numComments;
+    private final int gilded;
 
-    @Nonnull
-    private final Integer gilded;
-
-    @Nonnull
-    private final Integer score;
-
-    @Nonnull
-    private final Boolean over18;
+    private final int score;
 
     @Nonnull
     private final String permalink;
@@ -65,27 +56,30 @@ public class RedditStory extends RedditThing {
     @Nullable
     private final String distinguished;
 
-    @Nonnull
-    private final Boolean stickied;
+    private final boolean isSelf;
+
+    private final boolean over18;
+
+    private final boolean stickied;
 
     @JsonCreator
     public RedditStory(@JsonProperty("id") @Nonnull final String id,
                        @JsonProperty("title") @Nonnull final String title,
                        @JsonProperty("author") @Nonnull final String author,
-                       @JsonProperty("created_utc") @Nonnull final Long createdAt,
+                       @JsonProperty("created_utc") final long createdAt,
                        @JsonProperty("domain") @Nonnull final String domain,
-                       @JsonProperty("is_self") @Nonnull final Boolean isSelf,
-                       @JsonProperty("num_comments") @Nonnull final Integer numComments,
-                       @JsonProperty("gilded") @Nonnull final Integer gilded,
-                       @JsonProperty("score") @Nonnull final Integer score,
-                       @JsonProperty("over_18") @Nonnull final Boolean over18,
+                       @JsonProperty("num_comments") final int numComments,
+                       @JsonProperty("gilded") final int gilded,
+                       @JsonProperty("score") final int score,
                        @JsonProperty("permalink") @Nonnull final String permalink,
                        @JsonProperty("selftext") @Nullable final String selftext,
                        @JsonProperty("subreddit") @Nonnull final String subreddit,
                        @JsonProperty("thumbnail") @Nullable final String thumbnail,
                        @JsonProperty("url") @Nonnull final String url,
                        @JsonProperty("distinguished") @Nullable final String distinguished,
-                       @JsonProperty("sticked") @Nonnull final Boolean stickied) {
+                       @JsonProperty("is_self") final boolean isSelf,
+                       @JsonProperty("over_18") final boolean over18,
+                       @JsonProperty("sticked") final boolean stickied) {
 
         this.id = id;
         this.title = title;
@@ -93,89 +87,100 @@ public class RedditStory extends RedditThing {
         this.gilded = gilded;
         this.createdAt = new Date(createdAt * 1000L);
         this.domain = domain;
-        this.isSelf = isSelf;
         this.numComments = numComments;
         this.score = score;
-        this.over18 = over18;
         this.permalink = permalink;
         this.selftext = Strings.emptyToNull(selftext);
         this.subreddit = subreddit;
         this.thumbnail = Strings.emptyToNull(thumbnail);
         this.url = url;
         this.distinguished = distinguished;
+        this.isSelf = isSelf;
+        this.over18 = over18;
         this.stickied = stickied;
     }
 
+    @Nonnull
     public String getId() {
         return id;
     }
 
+    @Nonnull
     public String getTitle() {
         return title;
     }
 
+    @Nonnull
     public String getAuthor() {
         return author;
     }
 
+    @Nonnull
     public Date getCreatedAt() {
         return new Date(createdAt.getTime());
     }
 
+    @Nonnull
     public String getDomain() {
         return domain;
     }
 
-    public Boolean getIsSelf() {
+    public boolean getIsSelf() {
         return isSelf;
     }
 
-    public Integer getNumComments() {
+    public int getNumComments() {
         return numComments;
     }
 
-    public Integer getGilded() {
+    public int getGilded() {
         return gilded;
     }
 
-    public Integer getScore() {
+    public int getScore() {
         return score;
     }
 
-    public Boolean getOver18() {
+    public boolean getOver18() {
         return over18;
     }
 
+    @Nonnull
     public String getPermalink() {
         return permalink;
     }
 
+    @Nullable
     public String getSelftext() {
         return selftext;
     }
 
+    @Nonnull
     public String getSubreddit() {
         return subreddit;
     }
 
+    @Nullable
     public String getThumbnail() {
         return thumbnail;
     }
 
+    @Nonnull
     public String getUrl() {
         return url;
     }
 
+    @Nullable
     public String getDistinguished() {
         return distinguished;
     }
 
-    public Boolean getStickied() {
+    public boolean getStickied() {
         return stickied;
     }
 
     @Override
-    public boolean equals(final Object o) {
+    public boolean equals(@Nullable final Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         final RedditStory that = (RedditStory) o;
@@ -187,11 +192,13 @@ public class RedditStory extends RedditThing {
         return Objects.hashCode(getId());
     }
 
+    @Nonnull
     @Override
     public String getFullId() {
         return RedditKind.STORY.getKey() + "_" + getId();
     }
 
+    @Nonnull
     @JsonIgnore
     public Double getHotness() {
         //See http://www.outofscope.com/reddits-empire-no-longer-founded-on-a-flawed-algorithm/

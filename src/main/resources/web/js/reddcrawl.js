@@ -27,12 +27,11 @@
                 scope.showChart = false;
 
                 scope.toggleStoryHistory = function() {
-                    console.log("click " + scope.story);
                     $historyRow = $(element).find(".history-row");
                     $historyRow.toggle();
 
                     if(!scope.showChart) {
-                        $http.get("/api/story/" + scope.story.redditShortId)
+                        $http.get("/api/story/" + scope.story.id)
                             .then(function(res, err) {
                                 console.log(res.data);
                                 var data = new google.visualization.DataTable();
@@ -40,11 +39,11 @@
                                 data.addColumn('number', 'Score');
                                 data.addColumn('number', 'Comments');
 
-                                res.data.history.data.forEach(function(line) {
-                                    console.log(line);
-                                    data.addRow([(line[0]-res.data.createdAt)/1000.0, line[1], line[3]]);
-                                });
-
+                                var createdAt = res.data.summary.createdAt;
+                                var numEntries = res.data.history.timestamp.length;
+                                for(var i = 0; i < numEntries; i++) {
+                                    data.addRow([(res.data.history.timestamp[i]-createdAt)/1000.0, res.data.history.score[i], res.data.history.comments[i]]);
+                                }
 
                                 // Set chart options
                                 var options = {
@@ -52,6 +51,7 @@
                                     pointSize: 2,
                                     height: 300,
                                     vAxis: {minValue: 0},
+                                    hAxis: {title: "Seconds since Story Epoch", minValue: 0},
                                     legend: {
                                         position: 'bottom'
                                     }

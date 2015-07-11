@@ -6,7 +6,6 @@ import com.andrewortman.reddcrawl.client.models.RedditSubreddit;
 import com.andrewortman.reddcrawl.repository.SubredditRepository;
 import com.andrewortman.reddcrawl.repository.model.SubredditHistoryModel;
 import com.andrewortman.reddcrawl.repository.model.SubredditModel;
-import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import org.slf4j.Logger;
@@ -15,9 +14,7 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nonnull;
 import javax.ws.rs.ForbiddenException;
 import java.util.Date;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -35,46 +32,26 @@ public class SubredditHistoryUpdaterService extends Service {
     private final SubredditRepository subredditRepository;
 
     @Nonnull
-    private final Set<String> subreddits;
-
-    @Nonnull
     private final Meter historyUpdateMeter;
 
-    @Nonnull
-    private final Integer updateIntervalSeconds;
+    private final int updateIntervalSeconds;
 
     public SubredditHistoryUpdaterService(@Nonnull final RedditClient redditClient,
                                           @Nonnull final SubredditRepository subredditRepository,
                                           @Nonnull final MetricRegistry metricRegistry,
-                                          @Nonnull final Integer updateIntervalSeconds) {
+                                          final int updateIntervalSeconds) {
         this.redditClient = redditClient;
         this.subredditRepository = subredditRepository;
-        this.subreddits = new HashSet<>();
         this.updateIntervalSeconds = updateIntervalSeconds;
 
         //metrics
-        this.historyUpdateMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "subreddit", "history_updates"));
-        metricRegistry.register(MetricRegistry.name("reddcrawl", "subreddit", "tracked"),
-                new Gauge<Integer>() {
-                    @Override
-                    public Integer getValue() {
-                        return subreddits.size();
-                    }
-                });
-    }
-
-    public Set<String> getSubreddits() {
-        return subreddits;
+        this.historyUpdateMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "subreddit", "history", "updates"));
     }
 
     @Override
     public void runIteration() throws Exception {
-
-        //todo: clean up: make runIteration receive a variable if this is a recovery run so we dont have to add a buffer and handle errors
-        //in a special way.
-
-        //add 5 seconds for buffer so we don't miss anything.. since this doesn't happen very often
-        final Date latestDate = new Date(new Date().getTime() - TimeUnit.SECONDS.toMillis(updateIntervalSeconds) + 5000);
+        //hack: need way of doing this without a "divide by 2" window
+        final Date latestDate = new Date(new Date().getTime() - TimeUnit.SECONDS.toMillis(updateIntervalSeconds) / 2);
 
         final List<SubredditModel> subredditsNeedingUpdate = subredditRepository.findSubredditsNeedingUpdate(latestDate);
 
@@ -82,11 +59,9 @@ public class SubredditHistoryUpdaterService extends Service {
             LOGGER.info("Fetching subreddit details for subreddit " + subredditModel.getName());
             final RedditSubreddit redditSubreddit;
 
-            //todo: see if we can do the following a little better
-            //(perhaps attempt retries at the client side or create a new "ignorable error" exception)
             try {
                 redditSubreddit = redditClient.getSubredditByName(subredditModel.getName());
-            } catch (final RedditClientException redditClientException) {
+            } catch (@Nonnull final RedditClientException redditClientException) {
                 //if the subreddit went private, we'll receive a forbidden exception, so we need to handle that special case
                 //I had to do this when IAMA went private on July 2nd, 2015
                 if (redditClientException.getCause() instanceof ForbiddenException) {

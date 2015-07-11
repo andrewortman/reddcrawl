@@ -1,10 +1,7 @@
 package com.andrewortman.reddcrawl.repository.model;
 
-import com.andrewortman.reddcrawl.repository.Views;
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonView;
-
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.persistence.*;
 import java.util.Date;
 
@@ -14,97 +11,86 @@ import java.util.Date;
 @Entity(name = "story_history")
 public class StoryHistoryModel {
     @Id
-    @Nonnull
     @JoinColumn(name = "id", nullable = false)
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @JsonView(Views.Detailed.class)
-    private Long id;
+    private long id;
 
     @Nonnull
     @ManyToOne(optional = false)
     @JoinColumn(name = "story", nullable = false)
-    @JsonIgnore
     private StoryModel story;
 
     @Nonnull
     @Column(name = "timestamp", nullable = false)
-    @JsonView(Views.Short.class)
     private Date timestamp;
 
-    @Nonnull
     @Column(name = "score", nullable = true)
-    @JsonView(Views.Short.class)
-    private Integer score;
+    private int score;
 
-    @Nonnull
     @Column(name = "hotness", nullable = false)
-    @JsonView(Views.Short.class)
-    private Double hotness;
+    private double hotness;
 
-    @Nonnull
     @Column(name = "comments", nullable = false)
-    @JsonView(Views.Short.class)
-    private Integer comments;
+    private int comments;
 
-    @Nonnull
     @Column(name = "gilded", nullable = false)
-    @JsonView(Views.Short.class)
-    private Integer gilded;
+    private int gilded;
 
-    public Long getId() {
+    public long getId() {
         return id;
     }
 
-    public void setId(final Long id) {
+    public void setId(final long id) {
         this.id = id;
     }
 
-    @JsonIgnore
+    @Nonnull
     public StoryModel getStory() {
         return story;
     }
 
-    public void setStory(final StoryModel story) {
+    public void setStory(@Nonnull final StoryModel story) {
         this.story = story;
     }
 
+    @Nonnull
     public Date getTimestamp() {
         return new Date(timestamp.getTime());
     }
 
-    public void setTimestamp(final Date timestamp) {
+    public void setTimestamp(@Nonnull final Date timestamp) {
         this.timestamp = new Date(timestamp.getTime());
     }
 
-    public Integer getScore() {
+    public int getScore() {
         return score;
     }
 
-    public void setScore(final Integer score) {
+    public void setScore(final int score) {
         this.score = score;
     }
 
-    public Double getHotness() {
+    public double getHotness() {
         return hotness;
     }
 
-    public void setHotness(final Double hotness) {
+    public void setHotness(final double hotness) {
         this.hotness = hotness;
     }
 
-    public Integer getComments() {
+    public int getComments() {
         return comments;
     }
 
-    public void setComments(final Integer comments) {
+    public void setComments(final int comments) {
         this.comments = comments;
     }
 
-    public Integer getGilded() {
+    public int getGilded() {
         return gilded;
     }
 
-    public void setGilded(final Integer gilded) {
+    public void setGilded(final int gilded) {
         this.gilded = gilded;
     }
 
