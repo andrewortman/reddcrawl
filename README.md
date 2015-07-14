@@ -1,4 +1,4 @@
-"Reddcrawl" has been my personal project for a few years. I use it as an excuse to learn a new language. This version is written in Java/Spring but I've also made version in Python, and Node.JS.
+"Reddcrawl" has been my personal project for a few years. I use it as an excuse to learn a new language. This version is written in Java/Spring but I've also made version in Python and Node.JS.
 
 The goal of the project is to "predict the hivemind." There are several major components/stages of this project:
 
