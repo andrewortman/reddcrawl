@@ -16,7 +16,8 @@
                     <a href="http://reddit.com{{story.permalink}}" target="parent">{{story.title}}</a>
                     <div class="text-muted link-info"><strong>{{story.score}}</strong> upvotes | <strong>{{story.comments}}</strong> comments | <strong>{{story.gilded}}</strong> gilds. <a ng-click="toggleStoryHistory()">See history</a><br/>
                     Created in <strong>/r/{{story.subreddit}}</strong> at {{story.createdAt | date : 'short'}} and discovered {{(story.discoveredAt - story.createdAt)/1000.0 | number : 0 }} seconds later.
-                </div>
+                    </div>
+                </a>
             </div>
         </div>
     </div>

@@ -31,11 +31,11 @@ a {
 }
 
 .story-wrapper .story-thumbnailblock img {
-    border:1px solid black;
+    border: 1px solid black;
 }
 
 .story-infoblock {
-    display:table-cell;
+    display: table-cell;
     vertical-align: middle;
 }
 

@@ -12,6 +12,10 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
+/**
+ * Builds up the custom story json serialization.
+ * TODO: investigate making this a generic object mapper serializer
+ */
 public class StoryJsonBuilder {
     public static JsonNode renderJsonSummaryForStory(@Nonnull final StoryModel storyModel) {
         return JsonNodeFactory.instance.objectNode()

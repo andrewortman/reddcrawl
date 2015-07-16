@@ -6,8 +6,8 @@ import com.andrewortman.reddcrawl.client.models.RedditSubreddit;
 import com.andrewortman.reddcrawl.client.models.RedditThing;
 import com.andrewortman.reddcrawl.client.models.meta.RedditKind;
 import com.andrewortman.reddcrawl.client.ratelimiting.RateLimiter;
-import com.codahale.metrics.Meter;
-import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.*;
+import com.codahale.metrics.Timer;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Joiner;
@@ -20,13 +20,11 @@ import javax.annotation.Nonnull;
 import javax.ws.rs.ClientErrorException;
 import javax.ws.rs.ProcessingException;
 import javax.ws.rs.RedirectionException;
-import javax.ws.rs.client.ClientBuilder;
-import javax.ws.rs.client.ClientRequestContext;
-import javax.ws.rs.client.ClientRequestFilter;
-import javax.ws.rs.client.WebTarget;
+import javax.ws.rs.client.*;
 import javax.ws.rs.core.MediaType;
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 /**
  * RedditClient is the class used to actually communicate with the API. It handles
@@ -35,9 +33,6 @@ import java.util.*;
 public class RedditClient {
     public static final int MAX_ITEMS_PER_LISTING_PAGE = 100;
     private static final Logger LOGGER = LoggerFactory.getLogger(RedditClient.class);
-
-    @Nonnull
-    private final Meter clientRequestMeter;
 
     @Nonnull
     private final Meter clientExceptionMeter;
@@ -53,8 +48,13 @@ public class RedditClient {
                         @Nonnull final RateLimiter rateLimiter,
                         @Nonnull final MetricRegistry metricRegistry) {
 
-        this.clientRequestMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "client", "requests"));
         this.clientExceptionMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "client", "exceptions"));
+
+        final Meter clientRequestMeter =
+                metricRegistry.meter(MetricRegistry.name("reddcrawl", "client", "requests"));
+
+        final Timer clientRequestTimer =
+                metricRegistry.timer(MetricRegistry.name("reddcrawl", "client", "requests", "time"));
 
         this.redditEndpoint = ClientBuilder.newClient()
                 .property(ClientProperties.READ_TIMEOUT, readTimeout)
@@ -64,8 +64,23 @@ public class RedditClient {
                 .register(new ClientRequestFilter() {
                     @Override
                     public void filter(final ClientRequestContext requestContext) throws IOException {
-                        LOGGER.debug("Making request to " + requestContext.getUri());
+                        requestContext.setProperty("start_time", new Date());
                         clientRequestMeter.mark();
+                        LOGGER.debug("Making request to " + requestContext.getUri());
+                    }
+                })
+                .register(new ClientResponseFilter() {
+                    @Override
+                    public void filter(ClientRequestContext requestContext, ClientResponseContext responseContext) throws IOException {
+                        final Object startTimeObj = requestContext.getProperty("start_time");
+                        if(startTimeObj == null || !(startTimeObj instanceof Date)) {
+                            return;
+                        }
+
+                        final Date startTime = (Date)startTimeObj;
+
+                        final long timeMillis = new Date().getTime() - startTime.getTime();
+                        clientRequestTimer.update(timeMillis, TimeUnit.MILLISECONDS);
                     }
                 })
                 .target(baseUri);

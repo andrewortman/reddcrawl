@@ -172,7 +172,7 @@ public class StoryModel {
         return thumbnail;
     }
 
-    public void setThumbnail(@Nonnull final String thumbnail) {
+    public void setThumbnail(@Nullable final String thumbnail) {
         this.thumbnail = thumbnail;
     }
 
@@ -181,7 +181,7 @@ public class StoryModel {
         return distinguished;
     }
 
-    public void setDistinguished(@Nonnull final String distinguished) {
+    public void setDistinguished(@Nullable final String distinguished) {
         this.distinguished = distinguished;
     }
 
@@ -214,7 +214,7 @@ public class StoryModel {
         return selftext;
     }
 
-    public void setSelftext(@Nonnull final String selftext) {
+    public void setSelftext(@Nullable final String selftext) {
         this.selftext = selftext;
     }
 

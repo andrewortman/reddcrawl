@@ -56,8 +56,9 @@ public class ReddcrawlCommonConfiguration {
                             DatadogReporter.Expansion.MAX,
                             DatadogReporter.Expansion.MIN,
                             DatadogReporter.Expansion.MEDIAN,
-                            DatadogReporter.Expansion.MEDIAN,
-                            DatadogReporter.Expansion.RATE_15_MINUTE,
+                            DatadogReporter.Expansion.MEAN,
+                            DatadogReporter.Expansion.P95,
+                            DatadogReporter.Expansion.P99,
                             DatadogReporter.Expansion.RATE_5_MINUTE,
                             DatadogReporter.Expansion.RATE_1_MINUTE))
                     .withHost(InetAddress.getLocalHost().getHostName())
