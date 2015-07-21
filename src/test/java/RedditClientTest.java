@@ -1,5 +1,7 @@
 import com.andrewortman.reddcrawl.client.RedditClient;
 import com.andrewortman.reddcrawl.client.RedditClientException;
+import com.andrewortman.reddcrawl.client.RedditClientOptions;
+import com.andrewortman.reddcrawl.client.authentication.NoopAuthenticatingRequestFilter;
 import com.andrewortman.reddcrawl.client.models.RedditStory;
 import com.andrewortman.reddcrawl.client.models.RedditSubreddit;
 import com.andrewortman.reddcrawl.client.ratelimiting.NoopRateLimiter;
@@ -15,7 +17,9 @@ import static junit.framework.TestCase.*;
 
 public class RedditClientTest {
 
-    private static final RedditClient client = new RedditClient("reddcrawl-test", 5000, 5000, "http://reddit.com", new NoopRateLimiter(), new MetricRegistry());
+    private static final RedditClientOptions clientOptions = new RedditClientOptions("https://reddit.com", "reddcrawl-test", 5000, 500);
+
+    private static final RedditClient client = new RedditClient(clientOptions, new NoopRateLimiter(), new NoopAuthenticatingRequestFilter(), new MetricRegistry());
 
     @Test
     public void testGetFrontPageSubreddits() throws RedditClientException {

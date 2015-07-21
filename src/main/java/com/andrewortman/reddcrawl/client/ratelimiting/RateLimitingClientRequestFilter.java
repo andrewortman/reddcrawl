@@ -1,6 +1,5 @@
-package com.andrewortman.reddcrawl.client;
+package com.andrewortman.reddcrawl.client.ratelimiting;
 
-import com.andrewortman.reddcrawl.client.ratelimiting.RateLimiter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

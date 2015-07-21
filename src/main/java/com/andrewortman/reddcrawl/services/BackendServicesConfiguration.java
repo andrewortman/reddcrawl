@@ -78,8 +78,11 @@ public class BackendServicesConfiguration {
         return new NewStoryScraperService(redditClient,
                 storyRepository,
                 subredditRepository,
-                environment.getRequiredProperty("service.newstoryscraper.storycount", Integer.class),
-                environment.getRequiredProperty("service.newstoryscraper.subredditexpirationdays", Integer.class),
+                environment.getRequiredProperty("service.newstoryscraper.newstorycount", Integer.class),
+                environment.getRequiredProperty("service.newstoryscraper.hotstorycount", Integer.class),
+                environment.getRequiredProperty("service.newstoryscraper.subredditexpirationinterval", Integer.class),
+                environment.getRequiredProperty("service.newstoryscraper.autoupdatehistoryinterval", Integer.class),
+                environment.getRequiredProperty("service.newstoryscraper.interval", Integer.class),
                 metricRegistry);
     }
 

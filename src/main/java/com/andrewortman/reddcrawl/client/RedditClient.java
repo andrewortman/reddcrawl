@@ -1,13 +1,15 @@
 package com.andrewortman.reddcrawl.client;
 
+import com.andrewortman.reddcrawl.client.authentication.AuthenticatingRequestFilter;
 import com.andrewortman.reddcrawl.client.models.RedditListing;
 import com.andrewortman.reddcrawl.client.models.RedditStory;
 import com.andrewortman.reddcrawl.client.models.RedditSubreddit;
 import com.andrewortman.reddcrawl.client.models.RedditThing;
 import com.andrewortman.reddcrawl.client.models.meta.RedditKind;
 import com.andrewortman.reddcrawl.client.ratelimiting.RateLimiter;
-import com.codahale.metrics.*;
-import com.codahale.metrics.Timer;
+import com.andrewortman.reddcrawl.client.ratelimiting.RateLimitingClientRequestFilter;
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Joiner;
@@ -20,11 +22,14 @@ import javax.annotation.Nonnull;
 import javax.ws.rs.ClientErrorException;
 import javax.ws.rs.ProcessingException;
 import javax.ws.rs.RedirectionException;
-import javax.ws.rs.client.*;
+import javax.ws.rs.client.ClientBuilder;
+import javax.ws.rs.client.WebTarget;
 import javax.ws.rs.core.MediaType;
-import java.io.IOException;
-import java.util.*;
-import java.util.concurrent.TimeUnit;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * RedditClient is the class used to actually communicate with the API. It handles
@@ -40,50 +45,22 @@ public class RedditClient {
     @Nonnull
     private final WebTarget redditEndpoint;
 
-
-    public RedditClient(@Nonnull final String userAgent,
-                        final int connectTimeout,
-                        final int readTimeout,
-                        @Nonnull final String baseUri,
+    public RedditClient(@Nonnull final RedditClientOptions clientOptions,
                         @Nonnull final RateLimiter rateLimiter,
+                        @Nonnull final AuthenticatingRequestFilter authenticatingRequestFilter,
                         @Nonnull final MetricRegistry metricRegistry) {
 
         this.clientExceptionMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "client", "exceptions"));
 
-        final Meter clientRequestMeter =
-                metricRegistry.meter(MetricRegistry.name("reddcrawl", "client", "requests"));
-
-        final Timer clientRequestTimer =
-                metricRegistry.timer(MetricRegistry.name("reddcrawl", "client", "requests", "time"));
-
+        //add features in order from last filter -> first filter
         this.redditEndpoint = ClientBuilder.newClient()
-                .property(ClientProperties.READ_TIMEOUT, readTimeout)
-                .property(ClientProperties.CONNECT_TIMEOUT, connectTimeout)
-                .register(new UserAgentClientRequestFilter(userAgent))
+                .property(ClientProperties.READ_TIMEOUT, clientOptions.getReadTimeout())
+                .property(ClientProperties.CONNECT_TIMEOUT, clientOptions.getConnectTimeout())
+                .register(new RequestLoggingFeature(metricRegistry))
+                .register(authenticatingRequestFilter)
                 .register(new RateLimitingClientRequestFilter(rateLimiter))
-                .register(new ClientRequestFilter() {
-                    @Override
-                    public void filter(final ClientRequestContext requestContext) throws IOException {
-                        requestContext.setProperty("start_time", new Date());
-                        clientRequestMeter.mark();
-                        LOGGER.debug("Making request to " + requestContext.getUri());
-                    }
-                })
-                .register(new ClientResponseFilter() {
-                    @Override
-                    public void filter(ClientRequestContext requestContext, ClientResponseContext responseContext) throws IOException {
-                        final Object startTimeObj = requestContext.getProperty("start_time");
-                        if(startTimeObj == null || !(startTimeObj instanceof Date)) {
-                            return;
-                        }
-
-                        final Date startTime = (Date)startTimeObj;
-
-                        final long timeMillis = new Date().getTime() - startTime.getTime();
-                        clientRequestTimer.update(timeMillis, TimeUnit.MILLISECONDS);
-                    }
-                })
-                .target(baseUri);
+                .register(new UserAgentClientRequestFilter(clientOptions.getUserAgent()))
+                .target(clientOptions.getQueryEndpoint());
     }
 
     /**

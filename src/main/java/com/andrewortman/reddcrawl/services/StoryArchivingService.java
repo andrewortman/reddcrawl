@@ -49,13 +49,15 @@ public class StoryArchivingService extends Service {
 
     @Override
     public void runIteration() throws Exception {
-        //pretty simple, first get a list of stories that need archiving
 
-        final int BATCH_SIZE = 50;
         final Date lastCreateDate = new Date(new Date().getTime() - secondsAfterCreateDateToArchive * 1000L);
         LOGGER.info("Archiving all stories before " + lastCreateDate.toString());
 
-        while (true) {
+        //archive all the stories in batches (BATCH_SIZE) - otherwise we can consume all the IO in the postgres database
+        //doing deletes
+        final int BATCH_SIZE = 50;
+
+        while (!Thread.currentThread().isInterrupted()) {
             final List<StoryModel> archivableStories = storyRepository.findArchivableStories(lastCreateDate, BATCH_SIZE);
 
             if (archivableStories.size() == 0) {
@@ -77,7 +79,11 @@ public class StoryArchivingService extends Service {
             jsonArchive.writeJsonNodes(archiveName, archiveNodes);
             storyRepository.deleteStories(archivableStories);
             storiesArchivedCounter.inc(archivableStories.size());
-            Thread.sleep(secondsBetweenArchiveBatches * 1000L);
+            try {
+                Thread.sleep(secondsBetweenArchiveBatches * 1000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 

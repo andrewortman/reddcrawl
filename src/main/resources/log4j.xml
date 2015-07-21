@@ -36,6 +36,10 @@
         <level value="DEBUG"/>
     </logger>
 
+    <logger name="javax.ws.rs">
+        <level value="DEBUG"/>
+    </logger>
+
     <root>
         <level value="INFO"/>
         <appender-ref ref="out"/>
