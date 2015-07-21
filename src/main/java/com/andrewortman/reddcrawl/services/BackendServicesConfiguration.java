@@ -81,7 +81,6 @@ public class BackendServicesConfiguration {
                 environment.getRequiredProperty("service.newstoryscraper.newstorycount", Integer.class),
                 environment.getRequiredProperty("service.newstoryscraper.hotstorycount", Integer.class),
                 environment.getRequiredProperty("service.newstoryscraper.subredditexpirationinterval", Integer.class),
-                environment.getRequiredProperty("service.newstoryscraper.autoupdatehistoryinterval", Integer.class),
                 environment.getRequiredProperty("service.newstoryscraper.interval", Integer.class),
                 metricRegistry);
     }

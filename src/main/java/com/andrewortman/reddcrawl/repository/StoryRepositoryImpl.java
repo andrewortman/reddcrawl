@@ -74,8 +74,9 @@ public class StoryRepositoryImpl implements StoryRepository {
         if (historyItem != null) {
             //the history item exists
             final int numRows = entityManager.createQuery("UPDATE story s set " +
-                    "s.updatedAt=current_timestamp, s.checkedAt=current_timestamp, s.hotness=:hotness, s.score=:score, s.comments=:comments, s.gilded=:gilded " +
+                    "s.updatedAt=:timestamp, s.checkedAt=:timestamp, s.hotness=:hotness, s.score=:score, s.comments=:comments, s.gilded=:gilded " +
                     "where s.id=:id")
+                    .setParameter("timestamp", historyItem.getTimestamp())
                     .setParameter("hotness", historyItem.getHotness())
                     .setParameter("score", historyItem.getScore())
                     .setParameter("comments", historyItem.getComments())

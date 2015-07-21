@@ -48,10 +48,6 @@ public class NewStoryScraperService extends Service {
     //number of seconds in which a subreddit expires from the search (probably close to a week or so to handle things like /blog and /announcements
     private final int subredditExpirationInterval;
 
-    //number of seconds since the last history update a story can be autoupdated by the scraper
-    //(this is to help the story history updater from updating stories still seen in either the /hot or /new list)
-    private final int autoUpdateHistoryInterval;
-
     //number of seconds between fetches
     private final int checkInterval;
 
@@ -70,7 +66,6 @@ public class NewStoryScraperService extends Service {
                                   final int scavengeNewStoryCount,
                                   final int scavengeHotStoryCount,
                                   final int subredditExpirationInterval,
-                                  final int autoUpdateHistoryInterval,
                                   final int checkInterval,
                                   @Nonnull final MetricRegistry metricRegistry) {
         this.redditClient = redditClient;
@@ -79,7 +74,6 @@ public class NewStoryScraperService extends Service {
         this.scavengeNewStoryCount = scavengeNewStoryCount;
         this.scavengeHotStoryCount = scavengeHotStoryCount;
         this.subredditExpirationInterval = subredditExpirationInterval;
-        this.autoUpdateHistoryInterval = autoUpdateHistoryInterval;
         this.checkInterval = checkInterval;
         this.storyDiscoveredMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "story", "discovered"));
         this.storyDiscoveredCreatedTimeHistogram = metricRegistry.histogram(MetricRegistry.name("reddcrawl", "story", "discovered", "time"));
@@ -88,10 +82,13 @@ public class NewStoryScraperService extends Service {
 
     @Override
     public void runIteration() throws Exception {
+
+        final Date now = new Date();
+
         //get the subreddits we need to scan
         LOGGER.info("scavenging the hottest stories in the past hour");
         final Map<String, SubredditModel> subreddits = new HashMap<>();
-        final Date expirationDate = new Date(new Date().getTime() - TimeUnit.SECONDS.toMillis(subredditExpirationInterval));
+        final Date expirationDate = new Date(now.getTime() - TimeUnit.SECONDS.toMillis(subredditExpirationInterval));
         final List<SubredditModel> subredditModels = subredditRepository.getAllRecentlySeenSubreddits(expirationDate);
         for (final SubredditModel subredditModel : subredditModels) {
             subreddits.put(subredditModel.getName(), subredditModel);
@@ -115,23 +112,17 @@ public class NewStoryScraperService extends Service {
             //check if the story already exists, and if it does, bail out
             final StoryModel foundStory = storyRepository.findStoryByRedditShortId(story.getId());
             if (foundStory != null) {
-                final Date minDateForAutoupdate = new Date(new Date().getTime() - TimeUnit.SECONDS.toMillis(autoUpdateHistoryInterval));
-                if (foundStory.getUpdatedAt().before(minDateForAutoupdate)) {
-                    LOGGER.debug("Auto-updating history for story " + story.getId());
+                LOGGER.debug("Auto-updating history for story " + story.getId());
 
-                    final StoryHistoryModel historyModel = new StoryHistoryModel();
-                    historyModel.setTimestamp(new Date());
-                    historyModel.setScore(story.getScore());
-                    historyModel.setHotness(story.getHotness());
-                    historyModel.setComments(story.getNumComments());
-                    historyModel.setGilded(story.getGilded());
+                final StoryHistoryModel historyModel = new StoryHistoryModel();
+                historyModel.setTimestamp(now);
+                historyModel.setScore(story.getScore());
+                historyModel.setHotness(story.getHotness());
+                historyModel.setComments(story.getNumComments());
+                historyModel.setGilded(story.getGilded());
 
-                    storyRepository.addStoryHistory(foundStory, historyModel);
-                    this.autoHistoryUpdateMeter.mark();
-                } else {
-                    LOGGER.debug("ignoring story " + story.getId() + " because it already exists in db and doesn't need an autoupdate");
-                }
-
+                storyRepository.addStoryHistory(foundStory, historyModel);
+                this.autoHistoryUpdateMeter.mark();
                 continue;
             }
 
@@ -139,6 +130,8 @@ public class NewStoryScraperService extends Service {
                 LOGGER.error("Subreddit `" + story.getSubreddit() + "` does not exist yet - will not persist story " + story.getId() + " to DB");
                 continue;
             }
+
+            final Date discoveredAt = new Date();
 
             //create the story model
             final StoryModel storyModel = new StoryModel();
@@ -159,7 +152,7 @@ public class NewStoryScraperService extends Service {
 
             //create the history model - this only needs the basics, the rest is linked up in saveNewStory
             final StoryHistoryModel historyModel = new StoryHistoryModel();
-            historyModel.setTimestamp(new Date());
+            historyModel.setTimestamp(discoveredAt);
             historyModel.setScore(story.getScore());
             historyModel.setHotness(story.getHotness());
             historyModel.setComments(story.getNumComments());
@@ -172,7 +165,7 @@ public class NewStoryScraperService extends Service {
             storyDiscoveredMeter.mark();
 
             //mark the discovery time so we can measure the min/max/median discovery times
-            storyDiscoveredCreatedTimeHistogram.update(new Date().getTime() - storyModel.getCreatedAt().getTime());
+            storyDiscoveredCreatedTimeHistogram.update(discoveredAt.getTime() - storyModel.getCreatedAt().getTime());
 
             LOGGER.info("saved new story " + story.getId());
         }
