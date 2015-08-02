@@ -1,27 +1,34 @@
 package com.andrewortman.reddcrawl.services;
 
+import com.andrewortman.reddcrawl.archive.JsonArchive;
+import com.andrewortman.reddcrawl.archive.JsonArchiveEventHandler;
 import com.andrewortman.reddcrawl.repository.StoryRepository;
+import com.andrewortman.reddcrawl.repository.json.StoryJsonBuilder;
 import com.andrewortman.reddcrawl.repository.model.StoryModel;
-import com.andrewortman.reddcrawl.services.archive.JsonArchive;
-import com.andrewortman.reddcrawl.services.archive.StoryJsonBuilder;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
+import org.apache.commons.lang3.time.FastDateFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 
 public class StoryArchivingService extends Service {
-
     private static final Logger LOGGER = LoggerFactory.getLogger(StoryArchivingService.class);
+
+    //date format for directories
+    private static final FastDateFormat DATE_FORMAT = FastDateFormat.getInstance("yyyy-MM-dd", TimeZone.getTimeZone("UTC"));
+
 
     private final int secondsAfterCreateDateToArchive;
 
     private final int secondsBetweenArchiveBatches;
+
+    private final int maxStoryBatchSize;
 
     @Nonnull
     private final StoryRepository storyRepository;
@@ -36,29 +43,25 @@ public class StoryArchivingService extends Service {
     public StoryArchivingService(@Nonnull final StoryRepository storyRepository,
                                  final int secondsAfterCreateDateToArchive,
                                  final int secondsBetweenArchiveBatches,
+                                 final int maxStoryBatchSize,
                                  @Nonnull final MetricRegistry metricRegistry,
                                  @Nonnull final JsonArchive jsonArchive) {
 
         this.storyRepository = storyRepository;
         this.secondsAfterCreateDateToArchive = secondsAfterCreateDateToArchive;
         this.secondsBetweenArchiveBatches = secondsBetweenArchiveBatches;
+        this.maxStoryBatchSize = maxStoryBatchSize;
         this.jsonArchive = jsonArchive;
-
         this.storiesArchivedCounter = metricRegistry.counter(MetricRegistry.name("reddcrawl", "story", "archives"));
     }
 
     @Override
     public void runIteration() throws Exception {
-
         final Date lastCreateDate = new Date(new Date().getTime() - secondsAfterCreateDateToArchive * 1000L);
         LOGGER.info("Archiving all stories before " + lastCreateDate.toString());
 
-        //archive all the stories in batches (BATCH_SIZE) - otherwise we can consume all the IO in the postgres database
-        //doing deletes
-        final int BATCH_SIZE = 50;
-
         while (!Thread.currentThread().isInterrupted()) {
-            final List<StoryModel> archivableStories = storyRepository.findArchivableStories(lastCreateDate, BATCH_SIZE);
+            final List<StoryModel> archivableStories = storyRepository.findArchivableStories(lastCreateDate, maxStoryBatchSize);
 
             if (archivableStories.size() == 0) {
                 LOGGER.debug("All stories archived - all done.");
@@ -67,18 +70,35 @@ public class StoryArchivingService extends Service {
 
             LOGGER.debug("Archiving batch of " + archivableStories.size() + " stories");
 
-            final List<JsonNode> archiveNodes = new ArrayList<>();
+            final Multimap<String, JsonNode> archiveNodesByDate = HashMultimap.create();
 
             final String archiveName = lastCreateDate.getTime() + "-archive";
 
+            //used to look up the storymodel from the json node after sending it through the archiver
+            final Map<JsonNode, StoryModel> jsonNodeStoryModelMap = new HashMap<>();
+
             for (final StoryModel storyModel : archivableStories) {
-                LOGGER.info("archiving story " + storyModel.getRedditShortId());
-                archiveNodes.add(StoryJsonBuilder.renderJsonDetailForStory(storyModel, storyRepository.getStoryHistory(storyModel)));
+                LOGGER.debug("Archiving story " + storyModel.getRedditShortId());
+                final String dateString = DATE_FORMAT.format(storyModel.getCreatedAt());
+                final JsonNode jsonNode = StoryJsonBuilder.renderJsonDetailForStory(storyModel, storyRepository.getStoryHistory(storyModel));
+                archiveNodesByDate.put(dateString, jsonNode);
+                jsonNodeStoryModelMap.put(jsonNode, storyModel); //put a reference of the json node -> story model into a map so we can delete it with the event handler
             }
 
-            jsonArchive.writeJsonNodes(archiveName, archiveNodes);
-            storyRepository.deleteStories(archivableStories);
-            storiesArchivedCounter.inc(archivableStories.size());
+            //write the nodes, and pass in an event handler to clean up from the database
+            jsonArchive.writeNodes(archiveNodesByDate, new JsonArchiveEventHandler() {
+                @Override
+                public void handleArchiveComplete(@Nonnull Collection<JsonNode> completedJsonNodes) {
+                    List<StoryModel> deletableStories = new ArrayList<>(completedJsonNodes.size());
+                    for (final JsonNode jsonNode : completedJsonNodes) {
+                        deletableStories.add(jsonNodeStoryModelMap.get(jsonNode));
+                    }
+
+                    storyRepository.deleteStories(deletableStories);
+                    storiesArchivedCounter.inc(deletableStories.size());
+                }
+            });
+
             try {
                 Thread.sleep(secondsBetweenArchiveBatches * 1000L);
             } catch (InterruptedException e) {

@@ -1,13 +1,13 @@
 package com.andrewortman.reddcrawl.services;
 
 import com.andrewortman.reddcrawl.ReddcrawlCommonConfiguration;
+import com.andrewortman.reddcrawl.archive.FileJsonArchive;
+import com.andrewortman.reddcrawl.archive.JsonArchive;
 import com.andrewortman.reddcrawl.client.RedditClient;
 import com.andrewortman.reddcrawl.client.RedditClientConfiguration;
 import com.andrewortman.reddcrawl.repository.PersistenceConfiguration;
 import com.andrewortman.reddcrawl.repository.StoryRepository;
 import com.andrewortman.reddcrawl.repository.SubredditRepository;
-import com.andrewortman.reddcrawl.services.archive.FileJsonArchive;
-import com.andrewortman.reddcrawl.services.archive.JsonArchive;
 import com.codahale.metrics.MetricRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
@@ -109,6 +109,7 @@ public class BackendServicesConfiguration {
         return new StoryArchivingService(storyRepository,
                 environment.getRequiredProperty("service.archive.oldeststory", Integer.class),
                 environment.getRequiredProperty("service.archive.batchinterval", Integer.class),
+                environment.getRequiredProperty("service.archive.maxbatchsize", Integer.class),
                 metricRegistry, jsonArchive());
     }
 }

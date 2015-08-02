@@ -1,9 +1,9 @@
 package com.andrewortman.reddcrawl.web.controllers;
 
 import com.andrewortman.reddcrawl.repository.StoryRepository;
+import com.andrewortman.reddcrawl.repository.json.StoryJsonBuilder;
 import com.andrewortman.reddcrawl.repository.model.StoryHistoryModel;
 import com.andrewortman.reddcrawl.repository.model.StoryModel;
-import com.andrewortman.reddcrawl.services.archive.StoryJsonBuilder;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.springframework.beans.factory.annotation.Autowired;
