@@ -23,7 +23,6 @@ public class StoryArchivingService extends Service {
     //date format for directories
     private static final FastDateFormat DATE_FORMAT = FastDateFormat.getInstance("yyyy-MM-dd", TimeZone.getTimeZone("UTC"));
 
-
     private final int secondsAfterCreateDateToArchive;
 
     private final int secondsBetweenArchiveBatches;

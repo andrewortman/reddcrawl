@@ -16,11 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -55,7 +51,10 @@ public class NewStoryScraperService extends Service {
     private final Meter storyDiscoveredMeter;
 
     @Nonnull
-    private final Histogram storyDiscoveredCreatedTimeHistogram;
+    private final Histogram hotStoryDiscoveredCreatedTimeHistogram;
+
+    @Nonnull
+    private final Histogram newStoryDiscoveredCreatedTimeHistogram;
 
     @Nonnull
     private final Meter autoHistoryUpdateMeter;
@@ -76,7 +75,8 @@ public class NewStoryScraperService extends Service {
         this.subredditExpirationInterval = subredditExpirationInterval;
         this.checkInterval = checkInterval;
         this.storyDiscoveredMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "story", "discovered"));
-        this.storyDiscoveredCreatedTimeHistogram = metricRegistry.histogram(MetricRegistry.name("reddcrawl", "story", "discovered", "time"));
+        this.hotStoryDiscoveredCreatedTimeHistogram = metricRegistry.histogram(MetricRegistry.name("reddcrawl", "story", "discovered", "time", "hot"));
+        this.newStoryDiscoveredCreatedTimeHistogram = metricRegistry.histogram(MetricRegistry.name("reddcrawl", "story", "discovered", "time", "new"));
         this.autoHistoryUpdateMeter = metricRegistry.meter(MetricRegistry.name("reddcrawl", "story", "history", "autoupdate"));
     }
 
@@ -164,8 +164,14 @@ public class NewStoryScraperService extends Service {
             //mark the discovery
             storyDiscoveredMeter.mark();
 
-            //mark the discovery time so we can measure the min/max/median discovery times
-            storyDiscoveredCreatedTimeHistogram.update(discoveredAt.getTime() - storyModel.getCreatedAt().getTime());
+            //break it the discovery metric out so we can see if a single feed is having issues
+            final long msForDiscovery = discoveredAt.getTime() - storyModel.getCreatedAt().getTime();
+            if (hotStories.contains(story)) {
+                //mark the discovery time so we can measure the min/max/median discovery times
+                hotStoryDiscoveredCreatedTimeHistogram.update(msForDiscovery);
+            } else {
+                newStoryDiscoveredCreatedTimeHistogram.update(msForDiscovery);
+            }
 
             LOGGER.info("saved new story " + story.getId());
         }

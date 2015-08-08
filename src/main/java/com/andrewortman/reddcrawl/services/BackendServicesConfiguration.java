@@ -2,6 +2,7 @@ package com.andrewortman.reddcrawl.services;
 
 import com.andrewortman.reddcrawl.ReddcrawlCommonConfiguration;
 import com.andrewortman.reddcrawl.archive.FileJsonArchive;
+import com.andrewortman.reddcrawl.archive.GoogleStorageJsonArchive;
 import com.andrewortman.reddcrawl.archive.JsonArchive;
 import com.andrewortman.reddcrawl.client.RedditClient;
 import com.andrewortman.reddcrawl.client.RedditClientConfiguration;
@@ -9,6 +10,8 @@ import com.andrewortman.reddcrawl.repository.PersistenceConfiguration;
 import com.andrewortman.reddcrawl.repository.StoryRepository;
 import com.andrewortman.reddcrawl.repository.SubredditRepository;
 import com.codahale.metrics.MetricRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,6 +26,9 @@ import java.util.List;
 @Configuration
 @Import({ReddcrawlCommonConfiguration.class, RedditClientConfiguration.class, PersistenceConfiguration.class})
 public class BackendServicesConfiguration {
+
+    @Nonnull
+    private static final Logger LOGGER = LoggerFactory.getLogger(BackendServicesConfiguration.class);
 
     @Autowired
     @Nonnull
@@ -100,7 +106,17 @@ public class BackendServicesConfiguration {
     @Nonnull
     @Bean
     public JsonArchive jsonArchive() {
-        return new FileJsonArchive(new File(environment.getRequiredProperty("service.archive.directory", String.class)));
+        try {
+            final GoogleStorageJsonArchive googleStorageJsonArchive =
+                    new GoogleStorageJsonArchive(environment.getRequiredProperty("service.archive.google.bucket", String.class));
+
+            LOGGER.info("Using GoogleStorageJsonArchive!");
+            return googleStorageJsonArchive;
+        } catch (final Exception e) {
+            LOGGER.error("Could not use Google Storage Json Archive - check to make sure that GOOGLE_APPLICATION_CREDENTIALS is set!", e);
+            LOGGER.info("Falling back to FileJsonArchive instead");
+            return new FileJsonArchive(new File(environment.getRequiredProperty("service.archive.file.directory", String.class)));
+        }
     }
 
     @Nonnull
