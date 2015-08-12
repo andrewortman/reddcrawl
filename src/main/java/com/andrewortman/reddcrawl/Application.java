@@ -30,8 +30,9 @@ public final class Application {
         final DefaultServlet defaultServlet = new DefaultServlet();
         final ServletHolder defaultServletHolder = new ServletHolder(defaultServlet);
         defaultServletHolder.setInitParameter("dirAllowed", "true");
-        final URL resoureBase = Resource.newClassPathResource("/web").getURL();
+        final URL resoureBase = Resource.newClassPathResource("/web ").getURL();
         defaultServletHolder.setInitParameter("resourceBase", resoureBase.toString());
+        defaultServletHolder.setInitParameter("cacheControl", "max-age=3600,public");
         contextHandler.addServlet(defaultServletHolder, "/*");
         return contextHandler;
     }

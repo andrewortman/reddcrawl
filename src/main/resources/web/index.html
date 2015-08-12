@@ -9,6 +9,7 @@
     <link href="/css/bootstrap.min.css" rel="stylesheet">
     <link href="/css/bootstrap-theme.min.css" rel="stylesheet">
     <link href="/css/reddcrawl.css" rel="stylesheet">
+    <script src="/js/lib/angular.min.js"></script>
 </head>
 <body ng-app="reddcrawlApp">
 <div class="container" ng-controller="reddcrawlMainController">
@@ -16,7 +17,7 @@
     <div class="row">
         <div class="col-xs-12 text-center">
             <h1 style="margin: 0px">Reddcrawl</h1>
-            <div ng-show="stories" class="text-muted">Last updated at {{updateTime | date : 'medium'}}</div>
+            <div ng-show="stories" class="text-muted">Last updated at {{updateTime | date : 'medium' : "-0500"}} CT</div>
             <hr style="margin-top: 3px"/>
         </div>
     </div>
@@ -37,7 +38,6 @@
 
 <script type="text/javascript" src="//www.google.com/jsapi"></script>
 <script src="/js/lib/jquery-1.11.3.min.js"></script>
-<script src="/js/lib/angular.min.js"></script>
 <script src="/js/lib/bootstrap.min.js"></script>
 <script src="/js/reddcrawl.js"></script>
 </body>
