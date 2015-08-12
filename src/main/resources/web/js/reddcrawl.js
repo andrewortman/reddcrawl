@@ -4,19 +4,19 @@
     var reddcrawlApp = angular.module("reddcrawlApp", []);
 
     reddcrawlApp.controller('reddcrawlMainController', function ($scope, $interval, $timeout, $http) {
-        function updateStories() {
+        $scope.updateStories = function() {
+            $scope.updating = true;
             $http.get("/api/stories")
                 .then(function (res, err) {
+                    $scope.updating = false;
                     if (res.status == 200) {
                         $scope.stories = res.data;
                         $scope.updateTime = new Date();
-                    } else {
-                        console.log(status);
                     }
                 });
-        }
+        };
 
-        updateStories();
+        $scope.updateStories();
     });
 
     reddcrawlApp.directive('reddcrawlStory', function($timeout, $http) {
