@@ -106,9 +106,12 @@ CREATE TABLE story_history
   CONSTRAINT story_fk FOREIGN KEY (story)
   REFERENCES story (id) MATCH SIMPLE
   ON UPDATE NO ACTION ON DELETE CASCADE
-);
+) WITH (fillfactor=60);
 
 CREATE INDEX story_history_story_idx
 ON story_history
 USING BTREE
-(story DESC);
+(story DESC)
+WITH (fillfactory=90);
+
+CLUSTER story_history using story_history_story_idx;
