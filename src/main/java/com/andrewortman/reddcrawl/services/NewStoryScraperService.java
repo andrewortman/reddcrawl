@@ -166,11 +166,11 @@ public class NewStoryScraperService extends Service {
 
             //break it the discovery metric out so we can see if a single feed is having issues
             final long msForDiscovery = discoveredAt.getTime() - storyModel.getCreatedAt().getTime();
-            if (hotStories.contains(story)) {
+            if (newStories.contains(story)) {
                 //mark the discovery time so we can measure the min/max/median discovery times
-                hotStoryDiscoveredCreatedTimeHistogram.update(msForDiscovery);
-            } else {
                 newStoryDiscoveredCreatedTimeHistogram.update(msForDiscovery);
+            } else {
+                hotStoryDiscoveredCreatedTimeHistogram.update(msForDiscovery);
             }
 
             LOGGER.info("saved new story " + story.getId());
