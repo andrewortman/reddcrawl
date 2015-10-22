@@ -35,7 +35,7 @@ local function historyLerp(history, startIdx, secondsOut)
 	return nil
 end
 
-function loader.loadBatch(filename)
+function loader.loadBatch(filename, cacheDirectory)
 	local fp = io.open(filename, "r")
 	if fp == nil then
 		-- if cannot open, just return nil
@@ -102,7 +102,17 @@ function loader.loadBatch(filename)
 	return storyList
 end
 
-sets = loader.loadBatch("./data/test")
-print("train: " .. #sets.train)
-print("test: " .. #sets.test)
+function loader.getFileListing(directory) 
+	local listing = {}
+	for file in lfs.dir(options.datadir) do
+		local path = directory .. "/" .. file
+		local attr = lfs.attributes(path)
+		if attr.mode == "file" and attr.size > 0 then
+			table.insert(listing, path)
+		end
+	end
+	table.sort(listing)
+	return listing
+end
+
 return loader

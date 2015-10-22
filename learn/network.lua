@@ -50,7 +50,10 @@ local function gru(size)
 	return nn.gModule({input, previous}, {out})
 end
 -- create a single network
-function network.create(inputSize, outputSize, rnnSize, rnnLayers, dropoutRate)
+function network.create(rnnSize, rnnLayers, dropoutRate)
+	local seqInputSize = 3
+	local outputSize = 1
+	
 	-- create some styles to use when annotating our network
 	local styleGRU = {style='filled', fillcolor='#99D6AD'}
 	local styleDropout = {style="filled", fillcolor="#CCCCCC"}
@@ -62,15 +65,17 @@ function network.create(inputSize, outputSize, rnnSize, rnnLayers, dropoutRate)
 	local inputTable = {input}
 
 	-- first layer transforms the input and spreads it out to the RNN size... the rnn layer needs the same number of inputs as nodes
-	local l1 = nn.Linear(inputSize, rnnSize)(input):annotate{name="input_transform", graphAttributes=styleLinear}
+	local l1 = nn.Linear(seqInputSize, rnnSize)(input):annotate{name="input_transform", graphAttributes=styleLinear}
 	local drop1 = nn.Dropout(dropoutRate)(l1):annotate{name="drop1", graphAttributes=styleDropout}
 
 	-- generate the rnn layers
 	local previousLayer = drop1
+	local outputTable = {}
 	for i = 1, rnnLayers do
 		local prevH = nn.Identity()():annotate{name="prev_h["..i.."]", graphAttributes=styleInputHidden}
 		table.insert(inputTable, prevH)
 		local gruLayer = gru(rnnSize)({previousLayer, prevH}):annotate{name="gru["..i.."]", graphAttributes=styleGRU}
+		table.insert(outputTable, gruLayer)
 		local gruLinear = nn.Linear(rnnSize,rnnSize)(gruLayer):annotate{name="gru_l["..i.."]", graphAttributes=styleLinear}
 		local dropoutLayer = nn.Dropout(dropoutRate)(gruLinear):annotate{name="drop_gru["..i.."]", graphAttributes=styleDropout}
 		previousLayer = dropoutLayer
@@ -78,8 +83,9 @@ function network.create(inputSize, outputSize, rnnSize, rnnLayers, dropoutRate)
 
 	-- output layers
 	out = nn.Linear(rnnSize, outputSize)(previousLayer):annotate{name="output_transform", graphAttributes=styleLinear}
+	table.insert(outputTable, 1, out)
 
-	return nn.gModule(inputTable, {out})
+	return nn.gModule(inputTable, outputTable)
 end
 
 -- creates a new 1D tensor and points all the parameters to that tensor
