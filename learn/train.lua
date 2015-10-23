@@ -17,14 +17,16 @@ cmd:option("--gpuid", 0, "data directory")
 
 options = cmd:parse(arg);
 
+print("Creating network..")
 local baseNetwork = network.create(options.rnnsize, options.rnnlayers, options.dropout)
+print("Cloning network " .. options.seqlength .. " times..")
+local clones = network.clone(baseNetwork, options.seqlength)
 local batchFiles = loader.getFileListing(options.datadir)
 print("Saw " .. #batchFiles .. " batch files.")
 for idx = 1, #batchFiles do
 	local batchFile = batchFiles[idx]
 	print("Loading batch '" .. batchFile .. "' - this might take a minute")
 	local batch = loader.loadBatch(batchFile)
-	print("Batch loading complete")
 end
 
 -- graph.dot(mlp.fg, 'network', 'network')

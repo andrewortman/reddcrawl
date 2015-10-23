@@ -53,7 +53,7 @@ end
 function network.create(rnnSize, rnnLayers, dropoutRate)
 	local seqInputSize = 3
 	local outputSize = 1
-	
+
 	-- create some styles to use when annotating our network
 	local styleGRU = {style='filled', fillcolor='#99D6AD'}
 	local styleDropout = {style="filled", fillcolor="#CCCCCC"}
@@ -124,9 +124,13 @@ function network.clone(network, copies)
 	local base_params, base_grad_params = network:parameters()
 	for i = 1, copies do
 		clones[i] = network:clone()
-		local parameters, gradparams = clones[i]:parameters()
-		parameters:set(networkParams)
-		gradparams:set(networkGradParams)
+		local params, gradparams = clones[i]:parameters()
+		for i = 1, #params do
+			params[i]:set(base_params[i])
+		end
+		for i = 1, #gradparams do
+			gradparams[i]:set(base_grad_params[i])
+		end
 	end
 
 	return clones
