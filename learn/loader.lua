@@ -82,6 +82,7 @@ function loader.loadBatch(filename, cacheDirectory)
 				-- we can't predict any further, so we should trim the history 
 				story.history:resize(x-1, 3)
 				story.expected:resize(x-1, 2)
+				story.size = x-1; -- store the size so it can be easily consumed
 				break
 			end
 
