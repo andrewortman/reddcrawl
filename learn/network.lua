@@ -1,4 +1,6 @@
 require "nngraph"
+require "cunn"
+require "cutorch"
 local network = {}
 
 -- my implementation of a gated-recurrent-unit layer (GRU)
@@ -10,6 +12,7 @@ local function gru(size)
 
 	-- basically a component-wise linear operator (instead of fully connected)
 	-- todo: we might be able to do a parallel container instead, but check on that later
+	-- to see if it event matters
 	local input_sum = function() 
 		local gate = nn.CAddTable()({
 			nn.CMul(size)(input),
@@ -20,10 +23,10 @@ local function gru(size)
 		return nn.Add(size)(gate)
 	end
 
-
 	-- generate the reset and dynamic gates
 	local reset = nn.Sigmoid()(input_sum())
 	local dynamic = nn.Sigmoid()(input_sum())
+
 	-- compute the candidate hidden value
 	local candidate = nn.Tanh()(nn.Add(size)(nn.CAddTable()({
 		nn.CMul(size)(input), --it is the sum of the input
@@ -46,13 +49,14 @@ local function gru(size)
 			previous
 		})
 	})
-	nngraph.annotateNodes()
+
 	return nn.gModule({input, previous}, {out})
 end
+
 -- create a single network
 function network.create(rnnSize, rnnLayers, dropoutRate)
 	local seqInputSize = 3
-	local outputSize = 1
+	local outputSize = 2
 
 	-- create some styles to use when annotating our network
 	local styleGRU = {style='filled', fillcolor='#99D6AD'}
@@ -61,23 +65,32 @@ function network.create(rnnSize, rnnLayers, dropoutRate)
 	local styleInputHidden = {style='filled', fillcolor='#FFFFCA'}
 	local styleLinear = {style='filled', fillcolor='#CCB2FF'}
 
-	local input = nn.Identity()():annotate{graphAttributes=stylePink}
+	--input the entire network - the first value of the input table is the actual input vector
+	--and the remaining table values are the vectors representing the previous outputs from each hidden reccurrent layer
+	local input = nn.Identity()():annotate{graphAttributes=styleInput}
 	local inputTable = {input}
 
 	-- first layer transforms the input and spreads it out to the RNN size... the rnn layer needs the same number of inputs as nodes
 	local l1 = nn.Linear(seqInputSize, rnnSize)(input):annotate{name="input_transform", graphAttributes=styleLinear}
 	local drop1 = nn.Dropout(dropoutRate)(l1):annotate{name="drop1", graphAttributes=styleDropout}
 
-	-- generate the rnn layers
+	-- generate the recurrent layers
 	local previousLayer = drop1
 	local outputTable = {}
 	for i = 1, rnnLayers do
+		--prev h is an input to the layer - it is the output from this layer the last time it ran
 		local prevH = nn.Identity()():annotate{name="prev_h["..i.."]", graphAttributes=styleInputHidden}
 		table.insert(inputTable, prevH)
+
+		--generate a GRU layer, and make its output part of the network's output (so we can use it again)
 		local gruLayer = gru(rnnSize)({previousLayer, prevH}):annotate{name="gru["..i.."]", graphAttributes=styleGRU}
 		table.insert(outputTable, gruLayer)
+
+		--after each gru layer, I'm going ahead and doing a linear "shuffle" as well as introducing a dropout layer for regularization
 		local gruLinear = nn.Linear(rnnSize,rnnSize)(gruLayer):annotate{name="gru_l["..i.."]", graphAttributes=styleLinear}
 		local dropoutLayer = nn.Dropout(dropoutRate)(gruLinear):annotate{name="drop_gru["..i.."]", graphAttributes=styleDropout}
+
+		--make the input to the next layer the output of this one
 		previousLayer = dropoutLayer
 	end
 
@@ -119,18 +132,12 @@ end
 
 -- creates lots of clones of a network that share the same parameter and gradient memory space
 -- updating the parameter on one will update the parameter on all clones
+-- this allows each network to maintain a seperate state while sharing the same parameter space
 function network.clone(network, copies)
 	local clones = {}
-	local base_params, base_grad_params = network:parameters()
+	local baseParams, baseGradParams = network:parameters()
 	for i = 1, copies do
-		clones[i] = network:clone()
-		local params, gradparams = clones[i]:parameters()
-		for i = 1, #params do
-			params[i]:set(base_params[i])
-		end
-		for i = 1, #gradparams do
-			gradparams[i]:set(base_grad_params[i])
-		end
+		clones[i] = network:clone('weight', 'bias', 'gradWeight', 'gradBias')
 	end
 
 	return clones

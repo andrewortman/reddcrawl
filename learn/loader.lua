@@ -35,7 +35,11 @@ local function historyLerp(history, startIdx, secondsOut)
 	return nil
 end
 
-function loader.loadBatch(filename, cacheDirectory)
+function loader.loadBatch(filename, useCuda)
+	if useCuda then
+		require "cutorch"
+	end
+
 	local fp = io.open(filename, "r")
 	if fp == nil then
 		-- if cannot open, just return nil
@@ -98,7 +102,13 @@ function loader.loadBatch(filename, cacheDirectory)
 		if storyList[set] == nil then
 			storyList[set] = {}
 		end
+
+		if useCuda then
+			story.expected = story.expected:cuda()
+			story.history = story.history:cuda()
+		end
 		table.insert(storyList[set], story)
+		collectgarbage()
 	end
 	return storyList
 end
