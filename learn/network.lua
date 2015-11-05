@@ -1,4 +1,5 @@
 require "nngraph"
+require "nn"
 require "cunn"
 require "cutorch"
 local network = {}
@@ -95,10 +96,14 @@ function network.create(rnnSize, rnnLayers, dropoutRate)
 	end
 
 	-- output layers
-	out = nn.Linear(rnnSize, outputSize)(previousLayer):annotate{name="output_transform", graphAttributes=styleLinear}
-	table.insert(outputTable, 1, out)
+	local outputLinear = nn.Linear(rnnSize, outputSize)(previousLayer):annotate{name="output_transform", graphAttributes=styleLinear}
+	table.insert(outputTable, 1, outputLinear)
 
-	return nn.gModule(inputTable, outputTable)
+	local module = nn.gModule(inputTable, outputTable)
+	-- module.verbose = true
+	graph.dot(module.fg, "fg", "fg")
+	graph.dot(module.bg, "bg", "bg")
+	return module
 end
 
 -- creates a new 1D tensor and points all the parameters to that tensor
@@ -135,8 +140,9 @@ end
 -- this allows each network to maintain a seperate state while sharing the same parameter space
 function network.clone(network, copies)
 	local clones = {}
-	local baseParams, baseGradParams = network:parameters()
+
 	for i = 1, copies do
+		-- this makes a clone but shares the weight, bias, gradWeight, and gradBias parameters
 		clones[i] = network:clone('weight', 'bias', 'gradWeight', 'gradBias')
 	end
 

@@ -36,6 +36,7 @@ local function historyLerp(history, startIdx, secondsOut)
 end
 
 function loader.loadBatch(filename, useCuda)
+	-- if we need to load into the GPU, we need to load cutorch
 	if useCuda then
 		require "cutorch"
 	end
@@ -51,10 +52,8 @@ function loader.loadBatch(filename, useCuda)
 		local decoded = cjson.decode(line)
 		local historyCount = #decoded["history"]["timestamp"]
 
-		-- create an object for each story that contains the following
-		-- keys:
+		-- create an object for each story that contains the following keys:
 		--  * history - the matrix of history-based data to our model
-		--  * metadata - metadata associated with the story used as input into the model
 		--  * expected - the matrix of expected prediction values (outputs) of our model
 		local story = {}
 		 --delta time, delta score, delta comments
@@ -81,7 +80,7 @@ function loader.loadBatch(filename, useCuda)
 			story.history[x][2] = score - last.score
 			story.history[x][3] = comments - last.comments
 
-			local nextExpected = historyLerp(decoded["history"], x, 60*2) 
+			local nextExpected = historyLerp(decoded["history"], x, 60*5) 
 			if nextExpected == nil then
 				-- we can't predict any further, so we should trim the history 
 				story.history:resize(x-1, 3)
@@ -98,15 +97,18 @@ function loader.loadBatch(filename, useCuda)
 			last.comments = comments
 		end
 
+		-- sort them into sets (train/test)
 		local set = decoded["set"]
 		if storyList[set] == nil then
 			storyList[set] = {}
 		end
 
+		-- if we want to use cuda, we should ship it off to the GPU
 		if useCuda then
 			story.expected = story.expected:cuda()
 			story.history = story.history:cuda()
 		end
+
 		table.insert(storyList[set], story)
 		collectgarbage()
 	end
