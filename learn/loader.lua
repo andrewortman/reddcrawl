@@ -24,8 +24,8 @@ local function historyLerp(history, startIdx, secondsOut)
 			local commentSlope = (new.comments - last.comments) / timeDelta 
 
 			local prediction = {}
-			prediction.score = (scoreSlope * (targetTimestamp - last.timestamp))
-			prediction.comments = (commentSlope * (targetTimestamp - last.timestamp))
+			prediction.score = last.score + (scoreSlope * (targetTimestamp - last.timestamp))
+			prediction.comments = last.comments + (commentSlope * (targetTimestamp - last.timestamp))
 			return prediction
 		end
 		last = new
@@ -63,10 +63,7 @@ function loader.loadBatch(filename, useCuda)
 		story.metadata = {} -- nothing in metadata yet
 
 		 -- I calculate deltas instead of absolute values as in history input matrix
-		local last = {}
-		last.timestamp = decoded["summary"]["createdAt"]
-		last.score = 0
-		last.comments = 0
+		local lastTimestamp = decoded["summary"]["createdAt"]
 
 		for x = 1, historyCount do
 			local timestamp = decoded["history"]["timestamp"][x]
@@ -74,13 +71,13 @@ function loader.loadBatch(filename, useCuda)
 			local comments = decoded["history"]["comments"][x]
 
 			--number of minutes since last update
-			story.history[x][1] = (timestamp - last.timestamp)/60000.0
+			story.history[x][1] = (timestamp - lastTimestamp)/60000.0
 			
-			--delta score/comments
-			story.history[x][2] = score - last.score
-			story.history[x][3] = comments - last.comments
+			--score/comments
+			story.history[x][2] = score
+			story.history[x][3] = comments
 
-			local nextExpected = historyLerp(decoded["history"], x, 60*5) 
+			local nextExpected = historyLerp(decoded["history"], x, 60*2) 
 			if nextExpected == nil then
 				-- we can't predict any further, so we should trim the history 
 				story.history:resize(x-1, 3)
@@ -92,9 +89,7 @@ function loader.loadBatch(filename, useCuda)
 			story.expected[x][1] = nextExpected.score
 			story.expected[x][2] = nextExpected.comments
 
-			last.timestamp = timestamp
-			last.score = score
-			last.comments = comments
+			lastTimestamp = timestamp
 		end
 
 		-- sort them into sets (train/test)

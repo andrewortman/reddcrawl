@@ -7,7 +7,11 @@ local network = {}
 -- my implementation of a gated-recurrent-unit layer (GRU)
 -- only takes size, the input's size needs to match the rnn size
 -- use a Linear layer before this layer to accomplish this if needed
-local function gru(size) 
+local function gru(size, gate_squash)
+	if gate_squash == nil then
+		gate_squash = 1
+	end
+
 	local input = nn.Identity()()
 	local previous = nn.Identity()()
 
@@ -20,22 +24,24 @@ local function gru(size)
 			nn.CMul(size)(previous)
 		})
 
-		-- add bias
-		return nn.Add(size)(gate)
+		-- add a bias
+		-- return nn.Add(size)(gate)
+
+		return gate
 	end
 
 	-- generate the reset and dynamic gates
-	local reset = nn.Sigmoid()(input_sum())
-	local dynamic = nn.Sigmoid()(input_sum())
+	local reset = nn.Sigmoid()(nn.MulConstant(gate_squash, true)(input_sum()))
+	local dynamic = nn.Sigmoid()(nn.MulConstant(gate_squash, true)(input_sum()))
 
 	-- compute the candidate hidden value
-	local candidate = nn.Tanh()(nn.Add(size)(nn.CAddTable()({
+	local candidate = nn.Tanh()(nn.CAddTable()({
 		nn.CMul(size)(input), --it is the sum of the input
 		nn.CMulTable()({ -- and the previous hidden value (limited by the reset gate (which emits a value 0->1))
 			reset,
 			previous
 		})
-	})))
+	}))
 
 	-- the hidden output is now just the weighted sum of the candidate cell and the previous cell
 	-- with the weight determined by the dynamic gate
@@ -55,7 +61,7 @@ local function gru(size)
 end
 
 -- create a single network
-function network.create(rnnSize, rnnLayers, dropoutRate)
+function network.create(rnnSize, rnnLayers, dropoutRate, gateSquash)
 	local seqInputSize = 3
 	local outputSize = 2
 
@@ -84,15 +90,19 @@ function network.create(rnnSize, rnnLayers, dropoutRate)
 		table.insert(inputTable, prevH)
 
 		--generate a GRU layer, and make its output part of the network's output (so we can use it again)
-		local gruLayer = gru(rnnSize)({previousLayer, prevH}):annotate{name="gru["..i.."]", graphAttributes=styleGRU}
+		local gruLayer = gru(rnnSize, gateSquash)({previousLayer, prevH}):annotate{name="gru["..i.."]", graphAttributes=styleGRU}
 		table.insert(outputTable, gruLayer)
 
-		--after each gru layer, I'm going ahead and doing a linear "shuffle" as well as introducing a dropout layer for regularization
-		local gruLinear = nn.Linear(rnnSize,rnnSize)(gruLayer):annotate{name="gru_l["..i.."]", graphAttributes=styleLinear}
-		local dropoutLayer = nn.Dropout(dropoutRate)(gruLinear):annotate{name="drop_gru["..i.."]", graphAttributes=styleDropout}
+		local dropoutLayer = nn.Dropout(dropoutRate)(gruLayer):annotate{name="drop_gru["..i.."]", graphAttributes=styleDropout}
 
-		--make the input to the next layer the output of this one
-		previousLayer = dropoutLayer
+		if i ~= rnnLayers then
+			--between each gru layer, perform a linear operation so path exists between hidden nodes through each layer around
+			local gruLinear = nn.Linear(rnnSize,rnnSize)(dropoutLayer):annotate{name="gru_l["..i.."]", graphAttributes=styleLinear}
+			previousLayer = gruLinear
+		else 
+			--make the input to the next layer the output of this one
+			previousLayer = dropoutLayer
+		end
 	end
 
 	-- output layers
@@ -103,36 +113,8 @@ function network.create(rnnSize, rnnLayers, dropoutRate)
 	-- module.verbose = true
 	graph.dot(module.fg, "fg", "fg")
 	graph.dot(module.bg, "bg", "bg")
+	nngraph.display(module)
 	return module
-end
-
--- creates a new 1D tensor and points all the parameters to that tensor
--- this reallocates the parameter memory!!
-function network.flatten(network)
-	local function flatten(parameters) 
-		local totalNumElements = 0
-		local numElements = {}
-		for idx, singleParameterTensor in pairs(parameters) do
-			local tensorNumElements = singleParameterTensor:size(1)
-			for i = 2,singleParameterTensor:dim() do
-				tensorNumElements = tensorNumElements * singleParameterTensor:size(i)
-			end
-
-			numElements[idx] = tensorNumElements
-			totalNumElements = totalNumElements + tensorNumElements
-		end
-
-		local flattenedTensor = torch.Tensor(totalNumElements)
-		local currentOffset = 1
-		for idx, singleParameterTensor in pairs(parameters) do 
-			local copy = singleParameterTensor:clone(); -- since we are mutating the current parameter list, we need to take a clone  of the old values
-			singleParameterTensor:set(flattenedTensor:storage(), currentOffset, singleParameterTensor:size())
-			singleParameterTensor:copy(copy)
-			currentOffset = currentOffset + numElements[idx]
-		end
-	end	
-	local params, gradParams = network:parameters()
-	return flatten(params, gradParams)
 end
 
 -- creates lots of clones of a network that share the same parameter and gradient memory space
