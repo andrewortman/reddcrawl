@@ -1,7 +1,5 @@
 require "nngraph"
 require "nn"
-require "cunn"
-require "cutorch"
 local network = {}
 
 -- my implementation of a gated-recurrent-unit layer (GRU)
@@ -105,8 +103,8 @@ function network.create(rnnSize, rnnLayers, dropoutRate, gateSquash)
 		end
 	end
 
-	-- output layers
-	local outputLinear = nn.Linear(rnnSize, outputSize)(previousLayer):annotate{name="output_transform", graphAttributes=styleLinear}
+	-- output layers (we connect the linear transformed input and the rnn output as inputs to the output linear transform
+	local outputLinear = nn.Linear(rnnSize*2, outputSize)(nn.JoinTable(1)({drop1, previousLayer})):annotate{name="output_transform", graphAttributes=styleLinear}
 	table.insert(outputTable, 1, outputLinear)
 
 	local module = nn.gModule(inputTable, outputTable)

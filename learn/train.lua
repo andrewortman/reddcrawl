@@ -1,5 +1,3 @@
-require "cutorch"
-require "cunn"
 require "nngraph"
 require "optim"
 require "gnuplot"
@@ -26,7 +24,15 @@ cmd:option("--maxepochs", 0, "max number of epochs to run")
 cmd:option("--gatesquash", 1, "Factor to squash the GRU reset/dynamics gate")
 options = cmd:parse(arg);
 
+if options.gpuid ~= 0 then
+	-- include cuda torch and cuda nn implementations if we are using the gpu
+	require "cutorch"
+	require "cunn"
+end
+
 print("Creating network..")
+
+-- seed the RNG
 torch.seed()
 
 local base = {}
@@ -65,11 +71,11 @@ print("Saw " .. #batchFiles .. " batch files.")
 -- set up the optimizer
 local optimState = {}
 local optimConfig = {
-	learningRate=1e-3
+	learningRate=1e-2
 }
 
 local function optimizer(feval, x) 
-	return optim.rmsprop(feval, x, optimConfig, optimState)
+	return optim.adam(feval, x, optimConfig, optimState)
 end
 
 -- an "epoch" is the entire dataset through a single time, we can go indefinitely or through a 
@@ -96,7 +102,6 @@ while epochNumber < options.maxepochs or options.maxepochs == 0 do
 				end
 				base.gradParams:zero()
 				print("param norm before training: " .. base.params:norm())
-				print("grad param norm before training: " .. base.gradParams:norm())
 
 				-- go through this "minibatch" of stories
 				local miniBatchStartIdx = ((miniBatchIdx-1) * options.batchsize) + 1
@@ -118,8 +123,7 @@ while epochNumber < options.maxepochs or options.maxepochs == 0 do
 					local netStates = {[0] = zeroedRNNStates}
 					local netPredictions = {}
 
-					local graphTimestampExpected = torch.Tensor(numSlices * sliceSize)
-					local graphTimestampPredicted = torch.Tensor(numSlices * sliceSize)
+					local graphTimestamp = torch.Tensor(numSlices * sliceSize)
 					local graphScoreExpected = torch.Tensor(numSlices * sliceSize)
 					local graphScorePredicted = torch.Tensor(numSlices * sliceSize)
 
@@ -136,8 +140,7 @@ while epochNumber < options.maxepochs or options.maxepochs == 0 do
 							local expected = story.expected[sampleIdx]
 							
 							-- for graphing
-							graphTimestampExpected[sampleIdx] = story.history[sampleIdx][1]
-							graphTimestampPredicted[sampleIdx] = 2
+							graphTimestamp[sampleIdx] = story.history[sampleIdx][1]
 							graphScoreExpected[sampleIdx] = expected[1]
 							graphScorePredicted[sampleIdx] = output[1][1]
 
@@ -176,7 +179,13 @@ while epochNumber < options.maxepochs or options.maxepochs == 0 do
 						-- move the last rnn state to be the new initial state
 						netStates[0] = netStates[#netStates]
 					end
-					gnuplot.plot({"story", graphTimestampExpected:cumsum(), graphScoreExpected,'-'}, {"predicted", graphTimestampPredicted:cumsum(), graphScorePredicted,'-'})
+
+					local graphTimestampPredicted = graphTimestamp:clone()
+					graphTimestampPredicted[1] = graphTimestamp[1]+10 --offset by 10 seconds
+					graphTimestampPredicted = graphTimestampPredicted:cumsum()
+
+					graphTimestampExpected = graphTimestamp:cumsum()
+					gnuplot.plot({"story", graphTimestampExpected, graphScoreExpected,'-'}, {"predicted", graphTimestampPredicted, graphScorePredicted,'-'})
 					miniBatchSamplesProcessed = miniBatchSamplesProcessed + (numSlices * sliceSize)
 				end
 

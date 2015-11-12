@@ -77,7 +77,8 @@ function loader.loadBatch(filename, useCuda)
 			story.history[x][2] = score
 			story.history[x][3] = comments
 
-			local nextExpected = historyLerp(decoded["history"], x, 60*2) 
+			--10 minutes ahead of time prediction
+			local nextExpected = historyLerp(decoded["history"], x, 60*10) 
 			if nextExpected == nil then
 				-- we can't predict any further, so we should trim the history 
 				story.history:resize(x-1, 3)
