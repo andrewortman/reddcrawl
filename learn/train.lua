@@ -37,7 +37,7 @@ torch.seed()
 
 local base = {}
 base.network = network.create(options.rnnsize, options.rnnlayers, options.dropout, options.gatesquash)
-base.criterion = nn.MSECriterion()
+base.criterion = nn.AbsCriterion()
 if options.gpuid ~= 0 then
 	base.network = base.network:cuda()
 	base.criterion = base.criterion:cuda()
@@ -71,7 +71,7 @@ print("Saw " .. #batchFiles .. " batch files.")
 -- set up the optimizer
 local optimState = {}
 local optimConfig = {
-	learningRate=1e-2
+	learningRate=1e-3
 }
 
 local function optimizer(feval, x) 
@@ -180,12 +180,9 @@ while epochNumber < options.maxepochs or options.maxepochs == 0 do
 						netStates[0] = netStates[#netStates]
 					end
 
-					local graphTimestampPredicted = graphTimestamp:clone()
-					graphTimestampPredicted[1] = graphTimestamp[1]+10 --offset by 10 seconds
-					graphTimestampPredicted = graphTimestampPredicted:cumsum()
-
-					graphTimestampExpected = graphTimestamp:cumsum()
-					gnuplot.plot({"story", graphTimestampExpected, graphScoreExpected,'-'}, {"predicted", graphTimestampPredicted, graphScorePredicted,'-'})
+					graphTimestamp[1] = graphTimestamp[1]+10 --offset by 10 seconds
+					graphTimestamp = graphTimestamp:cumsum()
+					gnuplot.plot({"story", graphTimestamp, graphScoreExpected,'-'}, {"predicted", graphTimestamp, graphScorePredicted,'-'})
 					miniBatchSamplesProcessed = miniBatchSamplesProcessed + (numSlices * sliceSize)
 				end
 

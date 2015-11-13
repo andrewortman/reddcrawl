@@ -90,21 +90,14 @@ function network.create(rnnSize, rnnLayers, dropoutRate, gateSquash)
 		--generate a GRU layer, and make its output part of the network's output (so we can use it again)
 		local gruLayer = gru(rnnSize, gateSquash)({previousLayer, prevH}):annotate{name="gru["..i.."]", graphAttributes=styleGRU}
 		table.insert(outputTable, gruLayer)
-
-		local dropoutLayer = nn.Dropout(dropoutRate)(gruLayer):annotate{name="drop_gru["..i.."]", graphAttributes=styleDropout}
-
-		if i ~= rnnLayers then
-			--between each gru layer, perform a linear operation so path exists between hidden nodes through each layer around
-			local gruLinear = nn.Linear(rnnSize,rnnSize)(dropoutLayer):annotate{name="gru_l["..i.."]", graphAttributes=styleLinear}
-			previousLayer = gruLinear
-		else 
-			--make the input to the next layer the output of this one
-			previousLayer = dropoutLayer
-		end
+		local gruLinear = nn.Linear(rnnSize,rnnSize)(gruLayer):annotate{name="gru_l["..i.."]", graphAttributes=styleLinear}
+		local dropoutLayer = nn.Dropout(dropoutRate)(gruLinear):annotate{name="drop_gru["..i.."]", graphAttributes=styleDropout}
+		
+		previousLayer = dropoutLayer
 	end
 
-	-- output layers (we connect the linear transformed input and the rnn output as inputs to the output linear transform
-	local outputLinear = nn.Linear(rnnSize*2, outputSize)(nn.JoinTable(1)({drop1, previousLayer})):annotate{name="output_transform", graphAttributes=styleLinear}
+	-- output layers linear transform
+	local outputLinear = nn.Linear(rnnSize, outputSize)(previousLayer):annotate{name="output_transform", graphAttributes=styleLinear}
 	table.insert(outputTable, 1, outputLinear)
 
 	local module = nn.gModule(inputTable, outputTable)
