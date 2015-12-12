@@ -20,3 +20,8 @@ gradle/
 gradlew
 gradlew.bat
 reddcrawl.iml
+
+learn/src/model/
+learn/src/data/
+learn/src/cache/
+learn/src/network/
