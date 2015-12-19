@@ -70,6 +70,7 @@ function network.create(rnnSize, rnnLayers, dropoutRate, gateSquash)
     local metadataTimeOfWeekSize = 1 -- time of week (0->1)
     local metadataSubredditOneHotSize = 50 -- one hot of subreddits
     local metadataAuthorRankSize = 6 -- author ranks: top 5, 10, 50, 100, 500, 1000
+    local metadataDomainRankSize = 6 -- domain ranks: top 5, 10, 50, 100, 500, 1000
     local metadataStoryFlagsSize = 3 -- has thumbnail, is nsfw, is self
     local outputSize = 1 --just score for now
 
@@ -80,13 +81,14 @@ function network.create(rnnSize, rnnLayers, dropoutRate, gateSquash)
     local metadataTimeOfWeek = nn.Identity()():annotate{name="metadata_timeofweek", graphAttributes=styleInput}
     local metadataSubredditOneHot = nn.Identity()():annotate{name="metadata_subreddit_onehot", graphAttributes=styleInput}
     local metadataAuthorRank = nn.Identity()():annotate{name="metadata_authorrank", graphAttributes=styleInput}
+    local metadataDomainRank = nn.Identity()():annotate{name="metadata_domainrank", graphAttributes=styleInput}
     local metadataStoryFlags = nn.Identity()():annotate{name="metadata_flags", graphAttributes=styleInput}
 
-    local inputTable = {history, metadataTimeOfWeek, metadataSubredditOneHot, metadataAuthorRank, metadataStoryFlags}
+    local inputTable = {history, metadataTimeOfWeek, metadataSubredditOneHot, metadataAuthorRank, metadataDomainRank, metadataStoryFlags}
 
     -- generate the recurrent layers
     local previousLayer = nn.JoinTable(1)(inputTable):annotate{name="story_inputs_joined", graphAttributes=styleInputHidden}
-    local previousLayerSize = seqInputSize + metadataTimeOfWeekSize + metadataSubredditOneHotSize + metadataAuthorRankSize + metadataStoryFlagsSize
+    local previousLayerSize = seqInputSize + metadataTimeOfWeekSize + metadataSubredditOneHotSize + metadataAuthorRankSize + metadataDomainRankSize +  metadataStoryFlagsSize
     local outputTable = {}
     for i = 1, rnnLayers do
         --prev h is an input to the layer - it is the output from this layer the last time it ran

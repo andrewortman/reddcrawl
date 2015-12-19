@@ -3,58 +3,86 @@ local lfs = require "lfs"
 local logger = require "logger"
 local gzip = require "gzip"
 local _ = require "moses"
+local dbg = require "lib/debugger"
 
 local datautil = {}
 
 datautil.SCORE_SCALE = (1/1000)
 datautil.COMMENT_SCALE = (1/1000)
-datautil.MINUTES_PREDICTED = 2
 datautil.MAX_AUTHORS = 1000 -- max authors to consider when ranking
+datautil.MAX_DOMAINS = 1000 -- max domains to consider when ranking
 datautil.AUTHOR_RANKS = {5, 10, 50, 100, 500, 1000}
+datautil.DOMAIN_RANKS = {5, 10, 50, 100, 500, 1000}
 datautil.MAX_STORY_RETENTION_MS = (48*60*60*1000.0)
 
--- utility function that can calculate the value of a continuous linearly interpolated curve
--- of discrete samples at a given timestamp
-local function historyLerp(history, startIdx, secondsOut)
+-- this is the time between samples we are feeding into the network (ie, each sample is an interval after the previous sample)
+-- each story has a nonuniform sample rate, so we convert it into a uniformly sampled story rate by using linear interpolation
+datautil.RESAMPLE_INTERVAL = (60*10)
+datautil.SAMPLES_PREDICTED = {1, 3, 6, 9, 12} -- number of samples in the future to predict (keep ordered!)
+
+-- resamples using linear interpolation the history of a story
+-- requires you to pass in the created timestamp so we can properly interpolate the beginning
+local function resampleHistory(history, createdAt)
+    -- should return the history reinterpolated in finite steps that we can use efficiently
+
+    local timestamps = history["timestamp"]
+    local scores = history["scores"]
+    local comments = history["comments"]
+
+
+    local firstTimestamp = timestamps[0]
+    local lastTimestamp = timestamps[#timestamps]
+    local numSamples := math.floor((lastTimestamp - firstTimestamp) / (1000 * datautil.RESAMPLE_INTERVAL))
+
+    local output = {}
+    output.timestamps = torch.Tensor(numSamples):zero()
+    output.score = torch.Tensor(numSamples):zero()
+    output.comments = torch.Tensor(numSamples):zero()
+    output.size = numSamples
+
+
     local last = {}
-    last.timestamp = history["timestamp"][startIdx]
-    last.score = history["score"][startIdx]
-    last.comments = history["comments"][startIdx]
-    local targetTimestamp = last.timestamp + (secondsOut * 1000)
+    last.timestamp = createdAt
+    last.score = 1
+    last.comments = 0
+    last.index = 0
 
-    for idx = startIdx,#history["timestamp"] do
-        local new = {}
-        new.timestamp = history["timestamp"][idx]
-        new.score = history["score"][idx]
-        new.comments = history["comments"][idx]
+    for sample = 1; sample < numSamples; sample++ do
+        -- find the next point that is after the sample
+        -- note: we shouldn't overrun and we should always be guaranteed some sample 
+        -- because we trimmed off when calculating numSamples
+        local targetTimestamp = createdAt + (sample * 1000 * datautil.RESAMPLE_INTERVAL)
+        for x = last.index+1, #story["history"]["timestamp"] do
+            local newSampleTimestamp = timestamps[x]
+            local new = {}
+            new.timestamp = timestamps[x]
+            new.score = scores[x]
+            new.comments = comments[x]
+            new.index = x
 
-        if new.timestamp > targetTimestamp then
-            -- once we loop over past the target timestamp (start's history time + secondsOut)
-            -- we do a linear interpolation to predict the difference
-            -- between the start history and the target history time
-            local timeDelta = (new.timestamp - last.timestamp)
-            local scoreSlope = (new.score - last.score) / timeDelta
-            local commentSlope = (new.comments - last.comments) / timeDelta 
+            if newSampleTimestamp < targetTimestamp then
+                last = x
+            else 
+                local timeDelta = (new.timestamp - last.timestamp)
+                local scoreSlope = (new.score - last.score) / timeDelta
+                local commentSlope = (new.comments - last.comments) / timeDelta 
 
-            local prediction = {}
-            prediction.score = (scoreSlope * (targetTimestamp - last.timestamp))
-            prediction.comments = (commentSlope * (targetTimestamp - last.timestamp))
-            return prediction
+                output.timestamps[sample] = targetTimestamp -- seconds since created
+                output.score[sample] = (scoreSlope * (targetTimestamp - last.timestamp))
+                output.comments[sample] = (commentSlope * (targetTimestamp - last.timestamp))
+            end
         end
-        last = new
     end
-
-    -- we couldn't determine the expected value because we ran out of history
-    return nil
+    return story
 end
 
 -- utility function that will load the metadata from disk
 local function loadMetadata(metadatadir) 
     --load metadata from disk   --the metadatadir contains two folders produced by our spark job:
     -- {metadatadir}/authors/part-00000: map of authors to the total link karma we saw from them (sorted)
-    -- {metadatadir}/subreddits/part-00000: map of authors to the total link karma we observed (sorted)
+    -- {metadatadir}/domains/part-00000: map of domains to the total link karma we saw from them (sorted)
+    -- {metadatadir}/subreddits/part-00000: map of subreddits to the total link karma we observed (sorted)
 
-    logger:info("loading subreddit metadata...")
     local fp = gzip.open(metadatadir.."/subreddits/part-00000.gz")
     local idx = 0
     local subreddits = {}
@@ -67,12 +95,28 @@ local function loadMetadata(metadatadir)
 
     fp:close()
 
-    -- the metadata stores a one-hot representation of it's rank
+    -- the subreddit metadata stores a one-hot representation of it's rank
     for subreddit, idx in pairs(subreddits) do
         local onehot = torch.Tensor(numSubreddits):zero()
         onehot[idx] = 1.0
         subreddits[subreddit] = onehot
     end
+
+    local domainMap = {}
+    local idx = 0
+    fp = gzip.open(metadatadir.."/domains/part-00000.gz")
+    for line in fp:lines() do
+        local split = line:split(",")
+        domainMap[split[2]] = idx
+        idx = idx+1
+        if idx >= datautil.MAX_AUTHORS then
+            break
+        end
+    end
+
+    local numDomains = idx
+    fp:close()
+
 
     local authorMap = {}
     local idx = 0
@@ -81,14 +125,15 @@ local function loadMetadata(metadatadir)
         local split = line:split(",")
         authorMap[split[2]] = idx
         idx = idx+1
-        if idx >= datautil.MAX_AUTHORS then
+        if idx >= datautil.MAX_DOMAINS then
             break
         end
     end
+
     local numAuthors = idx
     fp:close()
 
-    return {subreddits=subreddits, numSubreddits=numSubreddits, authors=authorMap, numAuthors=numAuthors}
+    return {subreddits=subreddits, numSubreddits=numSubreddits, domains=domainMap, numDomains=domains, authors=authorMap, numAuthors=numAuthors}
 end
 
 -- provided a memoized version of loadmetadata
@@ -120,18 +165,11 @@ function datautil.loadBatch(filepath, cachedir, metadatadir)
 
         --each batch has one story per line
         for line in fp:lines() do 
-            local decoded = cjson.decode(line)
-            local historyCount = #decoded["history"]["timestamp"]
-
-            -- create an object for each story that contains the following keys:
-            --  * history - the matrix of history-based data to our model
-            --  * expected - the matrix of expected prediction values (outputs) of our model
-            --  * metadata - a table of individual vectors to be fed in as static inputs to the model
+            local decoded = cjson.decode(line)]
 
             local story = {}
             story.id = decoded["summary"]["id"]
-            story.history = torch.Tensor(historyCount, 3)
-            story.expected = torch.Tensor(historyCount, 1) 
+
             --create metadata input for network         
             local createdAt = decoded["summary"]["createdAt"]
 
@@ -150,6 +188,17 @@ function datautil.loadBatch(filepath, cachedir, metadatadir)
                 for idx, rank in pairs(datautil.AUTHOR_RANKS) do
                     if thisAuthorRank < rank then
                         authorRanks[idx] = 1.0
+                    end
+                end
+            end
+
+            -- determine if the domain ranks in one of the DOMAIN RANKS buckets
+            local domainRanks = torch.Tensor(#datautil.DOMAIN_RANKS):zero()
+            local thisDomainRank = metadata.domains[decoded["summary"]["domain"]]
+            if thisDomainRank ~= nil then
+                for idx, rank in pairs(datautil.DOMAIN_RANKS) do
+                    if thisDomainRank < rank then
+                        domainRanks[idx] = 1.0
                     end
                 end
             end
@@ -175,11 +224,21 @@ function datautil.loadBatch(filepath, cachedir, metadatadir)
             end
 
             -- finalize the metadata into a single table of vectors
-            story.metadata = {metadataTimeOfWeek, metadataSubredditOneHot, authorRanks, storyFlags}
+            story.metadata = {metadataTimeOfWeek, metadataSubredditOneHot, authorRanks, domainRanks, storyFlags}
+            
+            -- now lets build out the history - first we need to resample the history into discrete steps
+            local storyHistory = resampleHistory(decoded["history"], decoded["summary"]["createdAt"])
 
-            -- now go through the history to generate the "expected" matrix
-            local lastScore = 0
-            local lastComments = 0
+            story.size = storyHistory.size - _.max(datautil.SAMPLES_PREDICTED)
+            if story.size <= 0 do
+                logger:fatal("story way too short - need more history or a smaller MAX_SAMPLE_PREDICTED")
+                os.exit(1) -- bail early so we can fix the actual problem (not filtering out short stories)
+            end
+
+            for x = 1, story.size do 
+                expected = 
+            end
+
             for x = 1, historyCount do
                 local timestamp = decoded["history"]["timestamp"][x]
                 local score = decoded["history"]["score"][x]
@@ -192,10 +251,10 @@ function datautil.loadBatch(filepath, cachedir, metadatadir)
                 story.history[x][2] = score * datautil.SCORE_SCALE
                 story.history[x][3] = comments * datautil.COMMENT_SCALE
 
-                lastScore = score
-                lastComments = comments
+                local nextExpected = _.map(datautil.MINUTES_PREDICTED, function(minutes) 
+                    return historyLerp(decoded["history"], x, 60*minutes))
+                end)
 
-                local nextExpected = historyLerp(decoded["history"], x, 60*datautil.MINUTES_PREDICTED) 
                 if nextExpected == nil then
                     -- we can't predict any further, so we should trim the history 
                     story.history:resize(x-1, 3)
@@ -204,10 +263,15 @@ function datautil.loadBatch(filepath, cachedir, metadatadir)
                     break
                 end
 
-                story.expected[x][1] = (nextExpected.score + score) * datautil.SCORE_SCALE
+                -- story.expected[x][1] = (nextExpected.score + score) * datautil.SCORE_SCALE
                 --story.expected[x][2] = (nextExpected.comments + comments) * COMMENT_SCALE --ignore comment output for now
+
+                story.expected[x][1] = decoded["meta"]["max_score"] * datautil.SCORE_SCALE
+
             end
 
+            -- story.expected[2] = decoded["meta"]["max_comments"]
+            -- story.expected[3] = decoded["meta"]["max_gilded"]
             table.insert(storyList, story)
         end
 

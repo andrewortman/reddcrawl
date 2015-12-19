@@ -194,7 +194,7 @@ local function trainMinibatch(minibatch)
 
         -- for graphing (host side)
         local graphTimestamp = torch.Tensor(numSlices * sliceSize)
-        local graphScoreExpected = torch.Tensor(numSlices * sliceSize)
+        local graphScore = torch.Tensor(numSlices * sliceSize)
         local graphScorePredicted = torch.Tensor(numSlices * sliceSize)
 
         -- story loss
@@ -226,7 +226,8 @@ local function trainMinibatch(minibatch)
             
             if options.graph then
               graphTimestamp[sampleIdx] = story.history[sampleIdx][1]
-              graphScoreExpected[sampleIdx] = expected[1] 
+              -- graphScoreExpected[sampleIdx] = expected[1] 
+              graphScore[sampleIdx] = story.history[sampleIdx][2]
               graphScorePredicted[sampleIdx] = output[1][1]
             end
 
@@ -272,9 +273,9 @@ local function trainMinibatch(minibatch)
 
         local samplesProcessed = numSlices * sliceSize
         local gradParams = worker.network.gradParameters:clone()
-        return storyLosses:sum(), gradParams, samplesProcessed, graphTimestamp, graphScoreExpected, graphScorePredicted
+        return storyLosses:sum(), gradParams, samplesProcessed, graphTimestamp, graphScore, graphScorePredicted
       end,
-      function(storyLoss, gradParams, samplesProcessed, graphTimestamp, graphScoreExpected, graphScorePredicted)
+      function(storyLoss, gradParams, samplesProcessed, graphTimestamp, graphScore, graphScorePredicted)
         -- this code is run on the main thread (ie synchronized)
 
         if minibatchGradParameters == nil then
@@ -288,13 +289,8 @@ local function trainMinibatch(minibatch)
 
         if options.graph then
           gnuplot.figure(1)
-          gnuplot.plot({"story", graphTimestamp, graphScoreExpected:clone():div(datautil.SCORE_SCALE),'-'}, {"predicted", graphTimestamp, graphScorePredicted:clone():div(datautil.SCORE_SCALE),'-'})
+          gnuplot.plot({"story", graphTimestamp, graphScore:clone():div(datautil.SCORE_SCALE),'-'}, {"predicted", graphTimestamp, graphScorePredicted:clone():div(datautil.SCORE_SCALE),'-'})
           gnuplot.title("output view")
-          gnuplot.figure(2)
-          local err = graphScorePredicted:clone():add(graphScoreExpected:clone():mul(-1)):abs():div(datautil.SCORE_SCALE)
-          gnuplot.plot({"error", graphTimestamp, err,'|'})
-          gnuplot.title("error view")
-          gnuplot.axis({0, graphTimestamp:max(),0,1000})
         end
       end)
   end
