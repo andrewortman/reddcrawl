@@ -9,6 +9,10 @@ local styleDropout = {style="filled", fillcolor="#CCCCCC"}
 local styleInput = {style='filled', fillcolor='#FFADEB'}
 local styleInputHidden = {style='filled', fillcolor='#FFFFCA'}
 local styleLinear = {style='filled', fillcolor='#CCB2FF'}
+local styleSpecial = {style='filled', fillcolor='#F5ABD1'}
+
+network.SCORE_SCALE = 1/1000
+network.COMMENTS_SCALE = 1/1000
 
 -- my implementation of a gated-recurrent-unit layer (GRU)
 -- todo(way future) - make this an actual nn/cunn module so it doesnt have to do a lot of sequential steps to do layer
@@ -67,15 +71,22 @@ end
 function network.create(rnnSize, rnnLayers, dropoutRate, gateSquash)
   -- these input sizes must match up with what is fed into the network!
   local seqInputSize = 3 -- timestamp, history, comments
+
   local metadataTimeOfWeekSize = 1 -- time of week (0->1)
   local metadataSubredditOneHotSize = 50 -- one hot of subreddits
   local metadataAuthorRankSize = 6 -- author ranks: top 5, 10, 50, 100, 500, 1000
   local metadataDomainRankSize = 6 -- domain ranks: top 5, 10, 50, 100, 500, 1000
   local metadataStoryFlagsSize = 3 -- has thumbnail, is nsfw, is self
-  local outputSize = 1 --just score for now
+  local outputScoreSize = 1 --just one score for now
 
   -- history is history inputs that change on each timestep
-  local history = nn.Identity()():annotate{name="story_history_input", graphAttributes=styleInput}
+  local timestamp = nn.Identity()():annotate{name="timestamp_input", graphAttributes=styleInput}
+  local score = nn.Identity()():annotate{name="score_input", graphAttributes=styleInput}
+  local comments = nn.Identity()():annotate{name="comments_input", graphAttributes=commentsInput}
+
+  -- normalize the score (makes the network easier to train)
+  local scoreNormalized = nn.MulConstant(network.SCORE_SCALE)(score):annotate{name="score_normalized_input", graphAttributes=styleSpecial}
+  local commentsNormalized = nn.MulConstant(network.COMMENTS_SCALE)(comments):annotate{name="comments_normalized_input", graphAttributes=styleSpecial}
 
   -- metadata doesnt change between calls to the network, so we seperated it as a second input
   local metadataTimeOfWeek = nn.Identity()():annotate{name="metadata_timeofweek", graphAttributes=styleInput}
@@ -84,7 +95,7 @@ function network.create(rnnSize, rnnLayers, dropoutRate, gateSquash)
   local metadataDomainRank = nn.Identity()():annotate{name="metadata_domainrank", graphAttributes=styleInput}
   local metadataStoryFlags = nn.Identity()():annotate{name="metadata_flags", graphAttributes=styleInput}
 
-  local inputTable = {history, metadataTimeOfWeek, metadataSubredditOneHot, metadataAuthorRank, metadataDomainRank, metadataStoryFlags}
+  local inputTable = {timestamp, scoreNormalized, commentsNormalized, metadataTimeOfWeek, metadataSubredditOneHot, metadataAuthorRank, metadataDomainRank, metadataStoryFlags}
   local inputSize = seqInputSize + metadataTimeOfWeekSize + metadataSubredditOneHotSize + metadataAuthorRankSize + metadataDomainRankSize +  metadataStoryFlagsSize
   local inputTableJoined = nn.JoinTable(1)(inputTable):annotate{name="story_inputs_joined", graphAttributes=styleInputHidden}
   local inputTransformedLayer = nn.Linear(inputSize, rnnSize)(inputTableJoined):annotate{name="in_l1", graphAttributes=styleLinear}
@@ -107,10 +118,11 @@ function network.create(rnnSize, rnnLayers, dropoutRate, gateSquash)
   end
 
   -- output layers linear transforms
-  local outputDropout = nn.Dropout(dropoutRate)(previousLayer)
-  local outputLinear = nn.Linear(rnnSize, outputSize)(outputDropout):annotate{name="out_l1", graphAttributes=styleLinear}
-  local outputReLU = nn.PReLU()(outputLinear)
-  table.insert(outputTable, 1, outputReLU)
+  local outputDropout = nn.Dropout(dropoutRate)(previousLayer):annotate{name="gru_output_dropout", graphAttributes=styleDropout}
+  local outputScoreDifferential = nn.Linear(rnnSize, outputScoreDifferential)(outputDropout):annotate{name="out_l1", graphAttributes=styleLinear}
+
+  local outputScore = nn.CAddTable()({score, outputScoreDifferential})
+  table.insert(outputTable, 1, outputScore)
 
   local module = nn.gModule(inputTable, outputTable)
   -- module.verbose = true

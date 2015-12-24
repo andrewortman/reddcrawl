@@ -5,7 +5,6 @@ local lfs = require "lfs"
 local network = require "network"
 local datautil = require "datautil"
 local logger = require "logger"
-local dbg = require "lib/debugger"
 local _ = require "moses"
 
 require "cutorch"

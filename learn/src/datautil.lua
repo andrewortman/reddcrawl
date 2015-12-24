@@ -3,28 +3,26 @@ local lfs = require "lfs"
 local logger = require "logger"
 local gzip = require "gzip"
 local _ = require "moses"
-local dbg = require "lib/debugger"
 
 local datautil = {}
 
-datautil.SCORE_SCALE = (1/1000)
+datautil.SECONDS_IN_DAY = 60*60*24
+datautil.SECONDS_IN_WEEK = 60*60*24*7
 
-datautil.COMMENT_SCALE = (1/1000)
-datautil.MAX_AUTHORS = 1000 -- max authors to consider when ranking
-datautil.MAX_DOMAINS = 1000 -- max domains to consider when ranking
 datautil.AUTHOR_RANKS = {5, 10, 50, 100, 500, 1000}
+datautil.MAX_AUTHORS = _.max(datautil.AUTHOR_RANKS)
 datautil.DOMAIN_RANKS = {5, 10, 50, 100, 500, 1000}
-datautil.MAX_STORY_RETENTION_MS = (48*60*60*1000.0)
+datautil.MAX_DOMAINS = _.max(datautil.DOMAIN_RANKS)
+datautil.MAX_STORY_RETENTION_MS = (datautil.SECONDS_IN_DAY*2*1000.0)
 
 -- this is the time between samples in ms we are feeding into the network (ie, each sample is an interval after the previous sample)
 -- each story has a nonuniform sample rate, so we convert it into a uniformly sampled story rate by using linear interpolation
 datautil.RESAMPLE_INTERVAL = (60*5*1000)
 
+
 -- resamples using linear interpolation the history of a story
 -- requires you to pass in the created timestamp so we can properly interpolate the beginning
 local function resampleHistory(history, createdAt)
-  -- should return the history reinterpolated in finite steps that we can use efficiently
-
   local timestamps = history["timestamp"]
   local scores = history["score"]
   local comments = history["comments"]
@@ -39,14 +37,13 @@ local function resampleHistory(history, createdAt)
   output.score = torch.Tensor(output.size):zero()
   output.comments = torch.Tensor(output.size):zero()
 
-
   local last = {}
   last.timestamp = createdAt
   last.score = 1
   last.comments = 0
   last.index = 0
 
-  -- initial state
+  -- initial state always starts at timestamp zero with a score of 1 and comments of zero
   output.timestamp[1] = 0
   output.score[1] = 1
   output.comments[1] = 0
@@ -83,7 +80,7 @@ end
 
 -- utility function that will load the metadata from disk
 local function loadMetadata(metadatadir) 
-  --load metadata from disk   --the metadatadir contains two folders produced by our spark job:
+  -- the metadatadir contains three folders produced by our spark job:
   -- {metadatadir}/authors/part-00000: map of authors to the total link karma we saw from them (sorted)
   -- {metadatadir}/domains/part-00000: map of domains to the total link karma we saw from them (sorted)
   -- {metadatadir}/subreddits/part-00000: map of subreddits to the total link karma we observed (sorted)
@@ -182,7 +179,7 @@ function datautil.loadBatch(filepath, cachedir, metadatadir, shuffle)
       --moment of week is a scale from 0->1 where 0 is midnight on sunday, and 1 is 1 second before midnight on sunday
       local createdAtDate = os.date("*t", createdAt/1000.0)
       local secondOfDay = createdAtDate.hour*(60*60) + createdAtDate.min*(60) + createdAtDate.sec
-      local metadataTimeOfWeek = torch.Tensor{((createdAtDate.wday-1)*(60*60*24) + secondOfDay)/(60*60*24*7)}
+      local metadataTimeOfWeek = torch.Tensor{((createdAtDate.wday-1)*datautil.SECONDS_IN_DAY + secondOfDay)/datautil.SECONDS_IN_WEEK}
 
       -- get the onehot of the subreddit the story is in
       local metadataSubredditOneHot = metadata.subreddits[decoded["summary"]["subreddit"]]
@@ -245,10 +242,10 @@ function datautil.loadBatch(filepath, cachedir, metadatadir, shuffle)
         local comments = resampledHistory.comments[x]
 
         story.history[x][1] = timestamp/datautil.MAX_STORY_RETENTION_MS
-        story.history[x][2] = score * datautil.SCORE_SCALE
-        story.history[x][3] = comments * datautil.COMMENT_SCALE
+        story.history[x][2] = score
+        story.history[x][3] = comments
 
-        story.expected[x] = resampledHistory["score"][x+1] * datautil.SCORE_SCALE
+        story.expected[x] = resampledHistory["score"][x+1]
       end
       table.insert(storyList, story)
     end
