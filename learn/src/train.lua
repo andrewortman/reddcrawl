@@ -16,24 +16,28 @@ require "cunn"
 local cmd = torch.CmdLine()
 local function parseOptions() 
   cmd:text("reddcrawl-learn training script (requires nvidia gpu)")
-  cmd:text("options:")
+  cmd:text("hyperparameters:")
   cmd:option("--rnnsize", 768, "size of each RNN layer")
   cmd:option("--rnnlayers", 1, "number of RNN layers")
-  cmd:option("--dropout", 0.0, "dropout ratio (set to 0 to disable)")
+  cmd:option("--dropout", 0.1, "dropout ratio (set to 0 to disable)")
   cmd:option("--seqlength", 128, "sequence length for training")
   cmd:option("--gradclamp", 8, "max abs value of a gradient ( set to 0 to disable )")
-  cmd:option("--minibatchsize", 1, "number of stories per training batch")
+  cmd:option("--minibatchsize", 16, "number of stories per training batch")
+  cmd:option("--initrange", 0.1, "uniform random numbers to set the weights")
+  cmd:option("--gatesquash", 2, "factor to squash the GRU reset/dynamics gate")
+  cmd:option("--lr", 1e-3, "learning rate to use with rmsprop")
+  cmd:option("--decay", 1.0, "ratio in which to decay the learning rate after each batch")
+
+  cmd:text("options:")
+  cmd:option("--model", "", "if specified, a model to start with instead of creating a fresh one")
+  cmd:option("--reset", false, "if a model was loaded, set this flag to start the batch number back to zero")
+  cmd:option("--graph", false, "whether or not to show the graphs during training")
   cmd:option("--datadir", "./data/train", "batch file directory")
   cmd:option("--metadir", "./data/meta", "metadata file directory")
   cmd:option("--cachedir", "./cache/train", "caching directory for preprocessed batch files")
   cmd:option("--modeldir", "./models", "output models directory")
-  cmd:option("--gpus", "", "gpu worker distribution (eg: '1:3;2:4' puts 3 workers on gpu #1 and 4 workers on gpu #2)")
-  cmd:option("--initrange", 0.1, "uniform random numbers to set the weights")
+  cmd:option("--gpus", "1:1", "gpu worker distribution (eg: '1:3;2:4' puts 3 workers on gpu #1 and 4 workers on gpu #2)")
   cmd:option("--maxepochs", 0, "max number of epochs to run")
-  cmd:option("--gatesquash", 2, "factor to squash the GRU reset/dynamics gate")
-  cmd:option("--loadmodel", "", "if specified, a model to start with instead of creating a fresh one")
-  cmd:option("--reset", false, "if a model was loaded, set this flag to start the batch number back to zero")
-  cmd:option("--graph", false, "whether or not to show the graphs during training")
 
   local options = cmd:parse(arg);
 
@@ -67,16 +71,27 @@ if options.graph then
   require "gnuplot"
 end
 
+-- setup blank optimizer config/state
+local optimState = {}
+local optimConfig = {
+  learningRate = options.lr
+}
+
+
 -- create (or load) the base network
 local base = {}
-if options.loadmodel ~= "" then
-  logger:info("loading model '%s' from disk..", options.loadmodel)
-  local loadedModel = network.load(options.loadmodel)
+if options.model ~= "" then
+  logger:info("loading model '%s' from disk..", options.model)
+  local loadedModel = network.load(options.model)
   logger:info("overriding rnn size with %d", loadedModel.options.rnnsize)
   options.rnnsize = loadedModel.options.rnnsize
   logger:info("overriding rnn layers with %d", loadedModel.options.rnnlayers)
   options.rnnlayers = loadedModel.options.rnnlayers
   base.network = loadedModel.network
+
+  logger:info("overriding optimizer state/config")
+  optimState = loadedModel.optim.state
+  optimConfig = loadedModel.optim.config
 
   base.loadedModel = loadedModel
 else
@@ -180,7 +195,7 @@ local function trainMinibatch(minibatch)
         local datautil = require "datautil"
 
         cutorch.setDevice(worker.gpuid) -- set the device that needs to be used in this thread
-        cutorch.reserveStreams(32)
+        cutorch.reserveStreams(32) -- arbitrary
         cutorch.setStream(worker.localid)
         worker.network.base:zeroGradParameters() -- zero out grad params before training
 
@@ -193,9 +208,9 @@ local function trainMinibatch(minibatch)
         local sliceSize = math.floor(story.size/numSlices)
 
         -- for graphing (host side)
-        local graphTimestamp = torch.Tensor(numSlices * sliceSize)
-        local graphScore = torch.Tensor(numSlices * sliceSize)
-        local graphScorePredicted = torch.Tensor(numSlices * sliceSize)
+        local graphTimestamps = torch.CudaTensor(numSlices * sliceSize)
+        local graphScoreExpected = torch.CudaTensor(numSlices * sliceSize)
+        local graphScorePredicted = torch.CudaTensor(numSlices * sliceSize)
 
         -- story loss
         local storyLoss = 0
@@ -225,10 +240,9 @@ local function trainMinibatch(minibatch)
             local expected = story.expected[sampleIdx]
             
             if options.graph then
-              graphTimestamp[sampleIdx] = story.history[sampleIdx][1]
-              -- graphScoreExpected[sampleIdx] = expected[1] 
-              graphScore[sampleIdx] = story.history[sampleIdx][2]
-              graphScorePredicted[sampleIdx] = output[1][1]
+              graphTimestamps[sampleIdx] = sampleIdx * datautil.RESAMPLE_INTERVAL/(1000*60*60*24)
+              graphScoreExpected[sampleIdx] = expected
+              graphScorePredicted[sampleIdx] = output[1]
             end
 
             -- store the output split into the rnn output and the rnn state into two different tables
@@ -273,11 +287,10 @@ local function trainMinibatch(minibatch)
 
         local samplesProcessed = numSlices * sliceSize
         local gradParams = worker.network.gradParameters:clone()
-        return storyLosses:sum(), gradParams, samplesProcessed, graphTimestamp, graphScore, graphScorePredicted
+        return storyLosses:sum(), gradParams, samplesProcessed, graphTimestamps, graphScoreExpected, graphScorePredicted
       end,
-      function(storyLoss, gradParams, samplesProcessed, graphTimestamp, graphScore, graphScorePredicted)
+      function(storyLoss, gradParams, samplesProcessed, graphTimestamps, graphScoreExpected, graphScorePredicted)
         -- this code is run on the main thread (ie synchronized)
-
         if minibatchGradParameters == nil then
           minibatchGradParameters = gradParams
         else
@@ -288,9 +301,16 @@ local function trainMinibatch(minibatch)
         minibatchSamples = minibatchSamples + samplesProcessed
 
         if options.graph then
-          gnuplot.figure(1)
-          gnuplot.plot({"story", graphTimestamp, graphScore:clone():div(datautil.SCORE_SCALE),'-'}, {"predicted", graphTimestamp, graphScorePredicted:clone():div(datautil.SCORE_SCALE),'-'})
-          gnuplot.title("output view")
+          graphScorePredicted = graphScorePredicted:float():div(datautil.SCORE_SCALE)
+          graphScoreExpected = graphScoreExpected:float():div(datautil.SCORE_SCALE)
+          graphTimestamps = graphTimestamps:float()
+
+          gnuplot.figure(0)
+          local graph = {
+            {"expected", graphTimestamps, graphScoreExpected, '-'},
+            {"predicted", graphTimestamps, graphScorePredicted, '-'}
+          }
+          gnuplot.plot(graph)
         end
       end)
   end
@@ -305,11 +325,6 @@ end
 -- get a list of batch files
 local batchFiles = datautil.getFileListing(options.datadir)
 logger:info("registered " .. #batchFiles .. " batch files")
-
--- set up the optimizer
-local optimState = {}
-local optimConfig = {
-}
 
 -- this is just a wrapper around a single train/optimize step - it handles the business logic around the parameters
 -- before and after a train step
@@ -337,8 +352,8 @@ local function optimizeStep(trainStep)
     return loss, gradient:double()
   end
 
-  -- use adam (todo: make this configurable?)
-  return optim.adam(feval, base.params, optimConfig, optimState)
+  -- use rmsprop (todo: make this configurable?)
+  return optim.rmsprop(feval, base.params, optimConfig, optimState)
 end
 
 -- an "epoch" is the entire dataset through a single time, we can go indefinitely or through a 
@@ -350,7 +365,7 @@ if options.reset == false and base.loadedModel ~= nil then
 end
 
 while epochNumber <= options.maxepochs or options.maxepochs == 0 do
-  logger:info("starting epoch #%d", epochNumber)
+  logger:info("starting epoch #%d with learning rate of %d", epochNumber, optimConfig.learningRate)
   local startBatch = 1
   if options.reset == false and base.loadedModel ~= nil then
     startBatch = base.loadedModel.batch + 1
@@ -362,7 +377,8 @@ while epochNumber <= options.maxepochs or options.maxepochs == 0 do
     local batchFile = batchFiles[batchIdx]
     logger:info("loading batch file '%s'", batchFile)
 
-    local batch = datautil.loadBatch(batchFile, options.cachedir, options.metadir)
+    -- load batch (with shuffling)
+    local batch = datautil.loadBatch(batchFile, options.cachedir, options.metadir, true)
 
     -- now split the batch into fixed sizes called "minibatches" - these are the
     -- stories that are trained together in a single train step
@@ -378,9 +394,15 @@ while epochNumber <= options.maxepochs or options.maxepochs == 0 do
       collectgarbage() -- eh. why not?
     end
 
-    logger:info("completed with batch - saving model")
-    network.save(base.network, options, epochNumber, batchIdx, options.modeldir)
+    logger:info("completed with batch - saving checkpoint")
+
+    -- first, lets set a new learning rate before saving the model
+    optimConfig.learningRate = optimConfig.learningRate * options.decay
+    logger:info("new learning rate: %f", optimConfig.learningRate)
+
+    network.save(base.network, options, optimConfig, optimState, epochNumber, batchIdx, options.modeldir)
   end
   
+  optimConfig.learningRate = optimConfig.learningRate * 0.75
   epochNumber = epochNumber + 1
 end
