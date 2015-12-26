@@ -6,11 +6,13 @@ local network = require "network"
 local datautil = require "datautil"
 local logger = require "logger"
 local _ = require "moses"
+local dbg = require "lib/debugger"
 
 require "cutorch"
 require "cunn"
-
 require "gnuplot"
+
+PREDICTION_LIMIT = 100
 
 --- set up command line arguments
 local cmd = torch.CmdLine()
@@ -70,12 +72,12 @@ local lossCount = 0
 local losses = {}
 for idx, story in pairs(batch) do
   logger:info("testing against story %d/%d", idx, #batch)
+  
   gpuStory = datautil.copyStoryToGpu(story)
 
   local history = gpuStory.history
   local metadata = gpuStory.metadata
   local expected = gpuStory.expected
-
 
   local lastRNNState = {}
   for i = 1, #zeroedRNNStates do
@@ -86,7 +88,7 @@ for idx, story in pairs(batch) do
 
   --graphing
   local gradNorms = {} 
-  local labels = {"input", "timeofweek", "subreddit", "author", "domain", "flags", "previous1"}
+  local labels = {"history", "timeofweek", "subreddit", "author", "domain", "flags", "previous"}
   for i = 1, 7 do 
     table.insert(gradNorms, torch.Tensor(history:size(1)):zero())
   end
@@ -95,8 +97,21 @@ for idx, story in pairs(batch) do
   local graphExpected = torch.Tensor(history:size(1)):zero()
   local graphPredicted = torch.Tensor(history:size(1)):zero()
 
+  local historyInput = {}
+  local lastScore = 0
+  local triggered = false
   for sampleIdx = 1, history:size(1) do 
-    local input = {gpuStory.history[sampleIdx]}
+
+    if triggered ~= true and lastScore < PREDICTION_LIMIT then 
+      historyInput = gpuStory.history[sampleIdx]
+    else 
+      historyInput[1] = historyInput[1] + (datautil.RESAMPLE_INTERVAL/datautil.MAX_STORY_RETENTION_MS)
+      historyInput[2] = lastScore
+      historyInput[3] = gpuStory.history[sampleIdx][3]
+      triggered = true
+    end
+
+    input = {historyInput}
     input = _.append(input, gpuStory.metadata)
     input = _.append(input, lastRNNState)
 
@@ -116,10 +131,10 @@ for idx, story in pairs(batch) do
       end
     end
 
-    graphTimestamps[sampleIdx] = history[sampleIdx][1]
+    graphTimestamps[sampleIdx] = history[sampleIdx][1][1]
     graphExpected[sampleIdx] = expected[1]
     graphPredicted[sampleIdx] = output[1][1]
-
+    lastScore = output[1][1]
 
     local loss = criterion:forward(output[1], expected)
     storyLoss = storyLoss + loss
@@ -137,7 +152,7 @@ for idx, story in pairs(batch) do
 
   if options.graph then
     gnuplot.figure(1)
-    gnuplot.plot({'story', graphTimestamps, graphExpected, '-'}, {'predicted', graphTimestamps, graphPredicted, '-'})
+    gnuplot.plot({'predicted', graphTimestamps, graphPredicted, '-'}, {'story', graphTimestamps, graphExpected, '-'})
     gnuplot.title("story view")
 
     gnuplot.figure(2)

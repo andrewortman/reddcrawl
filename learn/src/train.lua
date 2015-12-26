@@ -27,6 +27,7 @@ local function parseOptions()
   cmd:option("--gatesquash", 2, "factor to squash the GRU reset/dynamics gate")
   cmd:option("--lr", 1e-3, "learning rate to use with rmsprop")
   cmd:option("--decay", 1.0, "ratio in which to decay the learning rate after each batch")
+  cmd:option("--rmspropdecay", 0.985, "ratio in which to decay the learning rate after each batch")
 
   cmd:text("options:")
   cmd:option("--model", "", "if specified, a model to start with instead of creating a fresh one")
@@ -74,7 +75,8 @@ end
 -- setup blank optimizer config/state
 local optimState = {}
 local optimConfig = {
-  learningRate = options.lr
+  learningRate = options.lr,
+  alpha = options.rmspropdecay
 }
 
 
@@ -92,6 +94,7 @@ if options.model ~= "" then
   logger:info("overriding optimizer state/config")
   optimState = loadedModel.optim.state
   optimConfig = loadedModel.optim.config
+  logger:info("learning rate: %f", optimConfig.learningRate)
 
   base.loadedModel = loadedModel
 else
@@ -143,6 +146,8 @@ local workerPool = threads.Threads(
     -- function - this is an artifact of the threads library
     require "nn"
     require "nngraph"
+    nngraph.setDebug(true)
+
     require "cunn"
     require "cutorch"
     
@@ -193,7 +198,7 @@ local function trainMinibatch(minibatch)
         --todo: can we make this a thread state variable?
         local _ = require "moses"
         local datautil = require "datautil"
-
+        local dbg = require "lib/debugger"
         cutorch.setDevice(worker.gpuid) -- set the device that needs to be used in this thread
         cutorch.reserveStreams(32) -- arbitrary
         cutorch.setStream(worker.localid)
@@ -211,6 +216,8 @@ local function trainMinibatch(minibatch)
         local graphTimestamps = torch.CudaTensor(numSlices * sliceSize)
         local graphScoreExpected = torch.CudaTensor(numSlices * sliceSize)
         local graphScorePredicted = torch.CudaTensor(numSlices * sliceSize)
+        local graphCommentsExpected = torch.CudaTensor(numSlices * sliceSize)
+        local graphCommentsPredicted = torch.CudaTensor(numSlices * sliceSize)
 
         -- story loss
         local storyLoss = 0
@@ -232,21 +239,25 @@ local function trainMinibatch(minibatch)
             worker.network.clones[sample]:training()   
 
             local sampleIdx = sliceNum*sliceSize + sample
-            local input = {story.history[sampleIdx]}
+            local input = {story.history.timestamps[sampleIdx], story.history.score[sampleIdx], story.history.comments[sampleIdx]}
             input = _.append(input, story.metadata)
             input = _.append(input, netStates[sample-1])
 
+            -- dbg()
+
             local output = worker.network.clones[sample]:forward(input) --the entire net output (the predictions + rnn state output)
             local expected = story.expected[sampleIdx]
-            
+
             if options.graph then
               graphTimestamps[sampleIdx] = sampleIdx * datautil.RESAMPLE_INTERVAL/(1000*60*60*24)
-              graphScoreExpected[sampleIdx] = expected
-              graphScorePredicted[sampleIdx] = output[1]
+              graphScoreExpected[sampleIdx] = expected[1]
+              graphScorePredicted[sampleIdx] = output[1][1]
+              graphCommentsExpected[sampleIdx] = expected[2]
+              graphCommentsPredicted[sampleIdx] = output[1][2]
             end
 
             -- store the output split into the rnn output and the rnn state into two different tables
-            netPredictions[sample] = output[1]
+            netPredictions[sample] = output
             netStates[sample] = {}
             for i = 1, options.rnnlayers do
               netStates[sample][i] = output[i+1] 
@@ -265,14 +276,15 @@ local function trainMinibatch(minibatch)
             -- the gradient of the output is simply the gradient of the output (calculated by the criterion) + the gradient of the next input (which is the output)
             local sampleIdx = sliceNum*sliceSize + sample
 
-            local input = {story.history[sampleIdx]}
+            local input = {story.history.timestamps[sampleIdx], story.history.score[sampleIdx], story.history.comments[sampleIdx]}
             input = _.append(input, story.metadata)
             input = _.append(input, netStates[sample-1])
 
             local output = netPredictions[sample]
             local expected = story.expected[sampleIdx]
+
             --calculate the prediction gradient
-            local predictionGradient = worker.criterion:backward(output, expected)
+            local predictionGradient = worker.criterion:backward(output[1], expected)
 
             --then we can backprop, which returns the input gradient with respect to the error
             local inputGradient = worker.network.clones[sample]:backward(input, {predictionGradient, unpack(lastRNNStateGradients)})
@@ -287,9 +299,9 @@ local function trainMinibatch(minibatch)
 
         local samplesProcessed = numSlices * sliceSize
         local gradParams = worker.network.gradParameters:clone()
-        return storyLosses:sum(), gradParams, samplesProcessed, graphTimestamps, graphScoreExpected, graphScorePredicted
+        return storyLosses:sum(), gradParams, samplesProcessed, graphTimestamps, graphScoreExpected, graphScorePredicted, graphCommentsExpected, graphCommentsPredicted
       end,
-      function(storyLoss, gradParams, samplesProcessed, graphTimestamps, graphScoreExpected, graphScorePredicted)
+      function(storyLoss, gradParams, samplesProcessed, graphTimestamps, graphScoreExpected, graphScorePredicted, graphCommentsExpected, graphCommentsPredicted)
         -- this code is run on the main thread (ie synchronized)
         if minibatchGradParameters == nil then
           minibatchGradParameters = gradParams
@@ -301,16 +313,37 @@ local function trainMinibatch(minibatch)
         minibatchSamples = minibatchSamples + samplesProcessed
 
         if options.graph then
-          graphScorePredicted = graphScorePredicted:float():div(datautil.SCORE_SCALE)
-          graphScoreExpected = graphScoreExpected:float():div(datautil.SCORE_SCALE)
+          graphScoreExpected = graphScoreExpected:float()
+          graphScorePredicted = graphScorePredicted:float()
           graphTimestamps = graphTimestamps:float()
+          graphScorePredictionError = graphScorePredicted - graphScoreExpected
+          graphCommentsPredictionError = graphCommentsPredicted - graphCommentsExpected
 
           gnuplot.figure(0)
-          local graph = {
+          gnuplot.plot({
             {"expected", graphTimestamps, graphScoreExpected, '-'},
             {"predicted", graphTimestamps, graphScorePredicted, '-'}
-          }
-          gnuplot.plot(graph)
+          })
+          gnuplot.title("score predictions")
+          
+          gnuplot.figure(1)
+          gnuplot.plot({
+            {"expected", graphTimestamps, graphCommentsExpected, '-'},
+            {"predicted", graphTimestamps, graphCommentsPredicted, '-'}
+          })
+          gnuplot.title("comment predictions")
+
+          gnuplot.figure(2)
+          gnuplot.plot({
+            {"error", graphTimestamps, graphScorePredictionError, '-'}
+          })
+          gnuplot.title("score error")
+
+          gnuplot.figure(3)
+          gnuplot.plot({
+            {"error", graphTimestamps, graphCommentsPredictionError, '-'}
+          })
+          gnuplot.title("comments error")
         end
       end)
   end

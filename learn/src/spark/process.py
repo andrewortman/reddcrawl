@@ -9,7 +9,7 @@ import operator
 TEST_SIZE = 0.0005 # the total % of stories in our combined (validation+test) set
 SHARD_SIZE = 256 # after loading the large number of small archive files, out many shards to partition them by?
 TRAIN_BATCHES = 128 # number of batches to generate for train set
-DAYS_TO_KEEP = 86 #84 + 2 days (12 weeks + 2 days to account for archival delay)
+DAYS_TO_KEEP = 58 #56 + 2 days (8 weeks + 2 days to account for archival delay)
 
 sc = pyspark.SparkContext();
 

@@ -13,12 +13,11 @@ datautil.AUTHOR_RANKS = {5, 10, 50, 100, 500, 1000}
 datautil.MAX_AUTHORS = _.max(datautil.AUTHOR_RANKS)
 datautil.DOMAIN_RANKS = {5, 10, 50, 100, 500, 1000}
 datautil.MAX_DOMAINS = _.max(datautil.DOMAIN_RANKS)
-datautil.MAX_STORY_RETENTION_MS = (datautil.SECONDS_IN_DAY*2*1000.0)
 
 -- this is the time between samples in ms we are feeding into the network (ie, each sample is an interval after the previous sample)
 -- each story has a nonuniform sample rate, so we convert it into a uniformly sampled story rate by using linear interpolation
 datautil.RESAMPLE_INTERVAL = (60*5*1000)
-
+datautil.MAX_STORY_RETENTION_MS = (datautil.SECONDS_IN_DAY*2*1000.0)
 
 -- resamples using linear interpolation the history of a story
 -- requires you to pass in the created timestamp so we can properly interpolate the beginning
@@ -234,19 +233,24 @@ function datautil.loadBatch(filepath, cachedir, metadatadir, shuffle)
 
       story.size = resampledHistory.size - 1
 
-      story.expected = torch.Tensor(story.size, 1)
-      story.history = torch.Tensor(story.size, 3)
+      story.history = {}
+      story.history.timestamps = torch.Tensor(story.size, 1)
+      story.history.score = torch.Tensor(story.size, 1)
+      story.history.comments = torch.Tensor(story.size, 1)
+
+      story.expected = torch.Tensor(story.size, 2, 1)
+      
       for x = 1, story.size do 
-        local timestamp = resampledHistory.timestamp[x]
-        local score = resampledHistory.score[x]
-        local comments = resampledHistory.comments[x]
+        -- inputs to the network
+        story.history.timestamps[x] = resampledHistory.timestamp[x]/datautil.MAX_STORY_RETENTION_MS
+        story.history.score[x] = resampledHistory.score[x]
+        story.history.comments[x] = resampledHistory.comments[x]
 
-        story.history[x][1] = timestamp/datautil.MAX_STORY_RETENTION_MS
-        story.history[x][2] = score
-        story.history[x][3] = comments
-
-        story.expected[x] = resampledHistory["score"][x+1]
+        -- generate the expected output from our network
+        story.expected[x][1] = resampledHistory["score"][x+1]
+        story.expected[x][2] = resampledHistory["comments"][x+1]
       end
+
       table.insert(storyList, story)
     end
 
@@ -266,11 +270,16 @@ end
 -- copys the batch to a table of gpuids and returns a map of the gpuid -> gpu reference
 function datautil.copyStoryToGpu(story)
   local storyCopy = _.clone(story, true) -- make a deep clone of story
-  storyCopy.history = storyCopy.history:cuda()
-  storyCopy.expected = storyCopy.expected:cuda()
+  storyCopy.expected = storyCopy.expected:cuda() 
+  
+  for idx, historyItem in pairs(storyCopy.history) do
+    storyCopy.history[idx] = historyItem:cuda()
+  end
+
   for idx, metadataItem in pairs(storyCopy.metadata) do
     storyCopy.metadata[idx] = metadataItem:cuda()
   end
+
   return storyCopy
 end
 

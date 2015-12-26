@@ -9,10 +9,10 @@ local styleDropout = {style="filled", fillcolor="#CCCCCC"}
 local styleInput = {style='filled', fillcolor='#FFADEB'}
 local styleInputHidden = {style='filled', fillcolor='#FFFFCA'}
 local styleLinear = {style='filled', fillcolor='#CCB2FF'}
-local styleSpecial = {style='filled', fillcolor='#F5ABD1'}
+local styleSpecial = {style='filled', fillcolor='#FFCC99'}
 
-network.SCORE_SCALE = 1/1000
-network.COMMENTS_SCALE = 1/1000
+network.INPUT_SCALE = 1e-3
+network.OUTPUT_SCALE = 1e-2
 
 -- my implementation of a gated-recurrent-unit layer (GRU)
 -- todo(way future) - make this an actual nn/cunn module so it doesnt have to do a lot of sequential steps to do layer
@@ -77,16 +77,11 @@ function network.create(rnnSize, rnnLayers, dropoutRate, gateSquash)
   local metadataAuthorRankSize = 6 -- author ranks: top 5, 10, 50, 100, 500, 1000
   local metadataDomainRankSize = 6 -- domain ranks: top 5, 10, 50, 100, 500, 1000
   local metadataStoryFlagsSize = 3 -- has thumbnail, is nsfw, is self
-  local outputScoreSize = 1 --just one score for now
+  local outputSize = 2 -- score + comment prediction
 
-  -- history is history inputs that change on each timestep
-  local timestamp = nn.Identity()():annotate{name="timestamp_input", graphAttributes=styleInput}
-  local score = nn.Identity()():annotate{name="score_input", graphAttributes=styleInput}
-  local comments = nn.Identity()():annotate{name="comments_input", graphAttributes=commentsInput}
-
-  -- normalize the score (makes the network easier to train)
-  local scoreNormalized = nn.MulConstant(network.SCORE_SCALE)(score):annotate{name="score_normalized_input", graphAttributes=styleSpecial}
-  local commentsNormalized = nn.MulConstant(network.COMMENTS_SCALE)(comments):annotate{name="comments_normalized_input", graphAttributes=styleSpecial}
+  local historyTimestamp = nn.Identity()():annotate{name="history_timestamp", graphAttributes=styleInput}
+  local historyScore = nn.Identity()():annotate{name="history_score", graphAttributes=styleInput}
+  local historyComments = nn.Identity()():annotate{name="history_comments", graphAttributes=styleInput}
 
   -- metadata doesnt change between calls to the network, so we seperated it as a second input
   local metadataTimeOfWeek = nn.Identity()():annotate{name="metadata_timeofweek", graphAttributes=styleInput}
@@ -95,36 +90,52 @@ function network.create(rnnSize, rnnLayers, dropoutRate, gateSquash)
   local metadataDomainRank = nn.Identity()():annotate{name="metadata_domainrank", graphAttributes=styleInput}
   local metadataStoryFlags = nn.Identity()():annotate{name="metadata_flags", graphAttributes=styleInput}
 
-  local inputTable = {timestamp, scoreNormalized, commentsNormalized, metadataTimeOfWeek, metadataSubredditOneHot, metadataAuthorRank, metadataDomainRank, metadataStoryFlags}
-  local inputSize = seqInputSize + metadataTimeOfWeekSize + metadataSubredditOneHotSize + metadataAuthorRankSize + metadataDomainRankSize +  metadataStoryFlagsSize
-  local inputTableJoined = nn.JoinTable(1)(inputTable):annotate{name="story_inputs_joined", graphAttributes=styleInputHidden}
-  local inputTransformedLayer = nn.Linear(inputSize, rnnSize)(inputTableJoined):annotate{name="in_l1", graphAttributes=styleLinear}
+  local networkInputTable = {historyTimestamp, historyScore, historyComments, metadataTimeOfWeek, metadataSubredditOneHot, metadataAuthorRank, metadataDomainRank, metadataStoryFlags}
+  local inputSize = seqInputSize + metadataTimeOfWeekSize + metadataSubredditOneHotSize + metadataAuthorRankSize + metadataDomainRankSize + metadataStoryFlagsSize
+  
+  -- normalize the score/comments
+  local historyScoreNormalized = nn.MulConstant(network.INPUT_SCALE)(historyScore):annotate{name="score_normalized", graphAttributes=styleSpecial}
+  local historyCommentsNormalized = nn.MulConstant(network.INPUT_SCALE)(historyComments):annotate{name="comments_normalized", graphAttributes=styleSpecial}
+
+  local inputs = {historyTimestamp, historyScoreNormalized, historyCommentsNormalized, metadataTimeOfWeek, metadataSubredditOneHot, metadataAuthorRank, metadataDomainRank, metadataStoryFlags}
+  local inputsJoined = nn.JoinTable(1)(inputs):annotate{name="inputs_joined", graphAttributes=styleSpecial}
+  local inputTransformedLayer = nn.Linear(inputSize, rnnSize)(inputsJoined):annotate{name="in_l1", graphAttributes=styleLinear}
+
   -- generate the recurrent layers
   local previousLayer = inputTransformedLayer
-
-  local outputTable = {}
+  local networkOutputTable = {}
   for i = 1, rnnLayers do
       --prev h is an input to the layer - it is the output from this layer the last time it ran
       local prevH = nn.Identity()():annotate{name="prev_h["..i.."]", graphAttributes=styleInputHidden}
-      table.insert(inputTable, prevH)
+      table.insert(networkInputTable, prevH)
 
       local inputDropoutLayer = nn.Dropout(dropoutRate)(previousLayer):annotate{name="gru_input_dropout["..i.."]", graphAttributes=styleDropout}
 
       --generate a GRU layer, and make its output part of the network's output (so we can use it again)
       local gruLayer = gru(rnnSize, gateSquash, dropoutRate)({inputDropoutLayer, prevH}):annotate{name="gru["..i.."]", graphAttributes=styleGRU}
-      table.insert(outputTable, gruLayer) -- do not dropout through time!
+      table.insert(networkOutputTable, gruLayer) -- do not dropout through time!
 
       previousLayer = gruLayer
   end
 
   -- output layers linear transforms
   local outputDropout = nn.Dropout(dropoutRate)(previousLayer):annotate{name="gru_output_dropout", graphAttributes=styleDropout}
-  local outputScoreDifferential = nn.Linear(rnnSize, outputScoreDifferential)(outputDropout):annotate{name="out_l1", graphAttributes=styleLinear}
+  local outputLinear = nn.Linear(rnnSize, outputSize)(outputDropout):annotate{name="output_l1", graphAttributes=styleLinear}
+  local outputDenormalized = nn.MulConstant(1.0/network.OUTPUT_SCALE)(outputLinear):annotate{name="output_denormalized", graphAttributes=styleSpecial}
 
-  local outputScore = nn.CAddTable()({score, outputScoreDifferential})
-  table.insert(outputTable, 1, outputScore)
+  local outputReshaped = nn.Reshape(outputSize, 1)(outputDenormalized):annotate{name="output_reshaped", graphAttributes=styleSpecial}
 
-  local module = nn.gModule(inputTable, outputTable)
+  -- the output of the table should just be a normalized "offset" - we will denormalize them and add them to the inputs to get the final result
+  local outputScoreDx = nn.Select(1,1)(outputReshaped):annotate{name="output_score_dx", graphAttributes=styleSpecial}
+  local outputCommentsDx = nn.Select(1,2)(outputReshaped):annotate{name="output_comments_dx", graphAttributes=styleSpecial}
+  local outputScore = nn.CAddTable()({outputScoreDx, historyScore}):annotate{name="output_score", graphAttributes=styleSpecial}
+  local outputComments = nn.CAddTable()({outputCommentsDx, historyComments}):annotate{name="output_comments", graphAttributes=styleSpecial}
+
+  networkOutputTable = {nn.JoinTable(1)({outputScore, outputComments}), unpack(networkOutputTable)}
+
+  local module = nn.gModule(networkInputTable, networkOutputTable)
+  module.name="reddcrawl-network"
+
   -- module.verbose = true
   lfs.mkdir("network")
   graph.dot(module.fg, "fg", "network/fg")
@@ -139,8 +150,8 @@ function network.clone(network, copies)
   local clones = {}
 
   for i = 1, copies do
-  -- this makes a clone but shares the weight, bias, gradWeight, and gradBias parameters
-  clones[i] = network:clone('weight', 'bias', 'gradWeight', 'gradBias')
+    -- this makes a clone but shares the weight, bias, gradWeight, and gradBias parameters
+    clones[i] = network:clone('weight', 'bias', 'gradWeight', 'gradBias')
   end
 
   return clones
