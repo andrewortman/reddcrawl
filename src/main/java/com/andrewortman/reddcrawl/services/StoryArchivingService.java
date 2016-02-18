@@ -3,7 +3,7 @@ package com.andrewortman.reddcrawl.services;
 import com.andrewortman.reddcrawl.archive.JsonArchive;
 import com.andrewortman.reddcrawl.archive.JsonArchiveEventHandler;
 import com.andrewortman.reddcrawl.repository.StoryRepository;
-import com.andrewortman.reddcrawl.repository.json.StoryJsonBuilder;
+import com.andrewortman.reddcrawl.json.StoryJsonBuilder;
 import com.andrewortman.reddcrawl.repository.model.StoryModel;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
@@ -70,8 +70,6 @@ public class StoryArchivingService extends Service {
             LOGGER.debug("Archiving batch of " + archivableStories.size() + " stories");
 
             final Multimap<String, JsonNode> archiveNodesByDate = HashMultimap.create();
-
-            final String archiveName = lastCreateDate.getTime() + "-archive";
 
             //used to look up the storymodel from the json node after sending it through the archiver
             final Map<JsonNode, StoryModel> jsonNodeStoryModelMap = new HashMap<>();

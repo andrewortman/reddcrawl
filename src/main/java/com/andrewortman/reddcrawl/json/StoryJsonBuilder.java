@@ -1,4 +1,4 @@
-package com.andrewortman.reddcrawl.repository.json;
+package com.andrewortman.reddcrawl.json;
 
 import com.andrewortman.reddcrawl.repository.model.StoryHistoryModel;
 import com.andrewortman.reddcrawl.repository.model.StoryModel;

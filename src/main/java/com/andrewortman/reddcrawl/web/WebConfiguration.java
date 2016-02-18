@@ -2,7 +2,7 @@ package com.andrewortman.reddcrawl.web;
 
 import com.andrewortman.reddcrawl.ReddcrawlCommonConfiguration;
 import com.andrewortman.reddcrawl.repository.PersistenceConfiguration;
-import com.andrewortman.reddcrawl.repository.json.StoryJsonBuilder;
+import com.andrewortman.reddcrawl.json.StoryJsonBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
