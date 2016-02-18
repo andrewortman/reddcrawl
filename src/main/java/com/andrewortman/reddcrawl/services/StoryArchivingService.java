@@ -106,7 +106,7 @@ public class StoryArchivingService extends Service {
 
     @Override
     public int getMinimumRepetitionTimeInSeconds() {
-        return 60 * 60; //every hour do a story dump to disk
+        return 15 * 60; //every 15 minutes do a story dump to archive
     }
 
     @Override

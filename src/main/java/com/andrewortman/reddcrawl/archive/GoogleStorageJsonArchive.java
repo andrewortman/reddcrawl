@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.client.googleapis.auth.oauth2.GoogleCredential;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
+import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.client.http.HttpTransport;
 import com.google.api.client.http.InputStreamContent;
 import com.google.api.client.json.jackson2.JacksonFactory;
@@ -56,20 +57,29 @@ public class GoogleStorageJsonArchive implements JsonArchive {
     // GCS allows up to compose a file from many components by concatenating them
     // We do this by creating a 'composed.json.gz" file in each archive that is the
     // concatenation of all the files in that archive - this makes spark jobs far more efficient
-    private void recomposeArchive(@Nonnull final String archiveName, @Nonnull final String lastArchivePath) {
+    private void recomposeArchive(@Nonnull final String archiveName, @Nonnull final StorageObject lastArchiveObject) throws IOException {
+        final String composedObjectName = archiveName + "/composed.json.gz";
         final List<ComposeRequest.SourceObjects> objectsList = new ArrayList<>(2);
-        objectsList.add(new ComposeRequest.SourceObjects().setName(archiveName + "/composed.json.gz"));
-        objectsList.add(new ComposeRequest.SourceObjects().setName(lastArchivePath));
+        objectsList.add(new ComposeRequest.SourceObjects().setName(composedObjectName));
+        objectsList.add(new ComposeRequest.SourceObjects().setName(lastArchiveObject.getName()));
 
         final ComposeRequest request = new ComposeRequest()
                 .setSourceObjects(objectsList)
-                .setDestination(new StorageObject().setName(archiveName+"/composed.json.gz").setBucket(this.rootBucketName));
+                .setDestination(new StorageObject().setName(composedObjectName).setBucket(this.rootBucketName));
 
         try {
             StorageObject execute = this.googleStorage.objects().compose(this.rootBucketName, archiveName + "/composed.json.gz", request).execute();
             LOGGER.info("Composition complete - component count for composition file " + execute.getName() + " is " + execute.getComponentCount());
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (GoogleJsonResponseException e) {
+            // the original composition file could not be found - it doesn't exist yet. We need to perform a 'copy' operation instead to seed it
+            if(e.getDetails().getCode() == 404) {
+                LOGGER.info("Copying first archive object into composition file");
+                StorageObject execute = this.googleStorage.objects().copy(this.rootBucketName, lastArchiveObject.getName(), this.rootBucketName, composedObjectName, lastArchiveObject).execute();
+                LOGGER.info("Copied " + execute.getSize().toString() + " bytes");
+            } else {
+                // some other exception happened
+                throw e;
+            }
         }
     }
 
@@ -107,7 +117,7 @@ public class GoogleStorageJsonArchive implements JsonArchive {
                 }
 
                 LOGGER.info("Recomposing archive " + rootBucketName + "/" + uploadedStorageObject.getName());
-                recomposeArchive(archiveName, uploadedStorageObject.getName());
+                recomposeArchive(archiveName, uploadedStorageObject);
             }
         }
     }
