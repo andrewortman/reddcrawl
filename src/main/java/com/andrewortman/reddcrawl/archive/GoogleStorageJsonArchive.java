@@ -97,9 +97,7 @@ public class GoogleStorageJsonArchive implements JsonArchive {
             while (nodeIterator.hasNext()) {
                 final JsonNode nodeToWrite = nodeIterator.next();
                 outputStreamWriter.write(OBJECT_MAPPER.writeValueAsString(nodeToWrite));
-                if (nodeIterator.hasNext()) {
-                    outputStreamWriter.write('\n');
-                }
+                outputStreamWriter.write('\n');
             }
             outputStreamWriter.close();
 
